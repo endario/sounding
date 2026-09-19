@@ -281,6 +281,16 @@ class CodexSessionLog(Base):
         self.assertEqual({l["name"]: l["used_at_least"] for l in r["limits"]}, {"codex": 0.26, "gpt-reserve": 0.03})
         self.assertEqual(r["taken_at"], (NOW - timedelta(minutes=5)).isoformat(), "as old as its oldest part")
 
+    def test_only_the_tail_of_a_long_log_is_read_and_its_cut_line_is_dropped(self):
+        events = [(NOW - timedelta(minutes=50 - i), self.snap("codex", float(i))) for i in range(40)]
+        self.log("a.jsonl", events)
+        size = (self.codex / "sessions" / "2026" / "a.jsonl").stat().st_size
+        with mock.patch.object(openai, "TAIL", size // 4), \
+             mock.patch.object(openai.json, "loads", wraps=json.loads) as parsed:
+            (r,) = openai.local(NOW)
+        self.assertEqual(r["limits"][0]["used_at_least"], 0.39)
+        self.assertLess(parsed.call_count, 15, "the head of the log was never parsed")
+
     def test_no_reading_without_the_main_limit(self):
         self.log("b.jsonl", [(NOW - timedelta(minutes=1), self.snap("base_model_inference", 3.0, "gpt-reserve"))])
         self.assertEqual(openai.local(NOW), [])

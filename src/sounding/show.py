@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from .projection import MIN_PAST
 from .schema import moment
 
 VENDOR_NAMES = {"anthropic": "Claude", "openai": "Codex", "zai": "Z.ai GLM", "opencode": "OpenCode", "xai": "Grok"}
@@ -49,6 +50,21 @@ def _paint(text: str, used: float | None, held: bool | None, color: bool) -> str
     return f"\033[{code}m{text}\033[0m"
 
 
+def _forecast(p: dict, now: datetime, color: bool) -> str:
+    """One line under a window: where it is heading, when it runs out, and what that rests on."""
+    lo, hi = (round(x * 100) for x in p["at_reset"])
+    text = "→ " + _paint(f"{lo}%" if lo == hi else f"{lo}–{hi}%", hi / 100, None, color) + " at reset"
+    ends = moment(p.get("exhausts_at"))
+    if ends:
+        text += (f" · runs out {ends.astimezone():%a %H:%M} (in {_until(ends, now)})" if ends > now
+                 else " · runs out now")
+    if p.get("run_out") is not None:
+        text += f" · {round(p['run_out'] * 100)}% chance of running out"
+    n = p.get("past_windows") or 0
+    text += f" · from {n} past window{'s' * (n != 1)}" if n >= MIN_PAST else " · pace only"
+    return text
+
+
 def render(readings: list[dict], now: datetime, *, color: bool = False, all_limits: bool = False) -> str:
     labels = _claude_dirs() if any(r.get("vendor") == "anthropic" for r in readings) else {}
     lines = []
@@ -81,13 +97,9 @@ def render(readings: list[dict], now: datetime, *, color: bool = False, all_limi
             when = (f"resets in {_until(resets, now):>7}  ({resets.astimezone():%a %H:%M})"
                     if resets else "no window open")
             flag = f"  HELD: {l.get('held_why') or 'yes'}" if held else ""
-            proj = l.get("projection")
-            if proj and not held:
-                lo, hi = (round(x * 100) for x in proj["at_reset"])
-                ends = moment(proj.get("exhausts_at"))
-                flag = "  → " + _paint(f"{lo}%" if lo == hi else f"{lo}–{hi}%", hi / 100, None, color) \
-                    + " at reset" + (f", full in {_until(ends, now)}" if ends and ends > now else ", full" if ends else "")
             lines.append(f"  {name:<15} " + _paint(f"{bar} {pct}", used, held, color) + f"  {when}{flag}")
+            if l.get("projection") and not held and (used or 0) < 1:
+                lines.append(" " * 18 + _forecast(l["projection"], now, color))
         if not shown:
             lines.append("  no usage windows reported")
         lines.append("")

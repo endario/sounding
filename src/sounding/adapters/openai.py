@@ -116,6 +116,21 @@ def _session_limits(snap: dict, now: datetime) -> list[dict]:
     return out
 
 
+TAIL = 1 << 20
+
+
+def _tail(f) -> str:
+    """The last TAIL bytes of a session log, from its first whole line: logs grow to hundreds of
+    megabytes, and only their newest events matter."""
+    with open(f, "rb") as h:
+        size = h.seek(0, 2)
+        h.seek(max(size - TAIL, 0))
+        data = h.read()
+    if size > TAIL:
+        data = data[data.find(b"\n") + 1:]
+    return data.decode(errors="replace")
+
+
 def local(now: datetime) -> list[dict]:
     """The newest `rate_limits` Codex itself logged, with no network call.
 
@@ -138,7 +153,7 @@ def local(now: datetime) -> list[dict]:
         try:
             if datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc) < since:
                 continue
-            lines = f.read_text(errors="replace").splitlines()
+            lines = _tail(f).splitlines()
         except OSError:
             continue
         for line in lines:
