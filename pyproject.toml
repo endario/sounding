@@ -1,0 +1,14 @@
+[project]
+name = "sounding"
+version = "0.0.1"
+description = "Read AI-subscription quota usage, per window, as facts."
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+sounding = "sounding.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

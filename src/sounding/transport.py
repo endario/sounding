@@ -1,0 +1,48 @@
+"""One HTTP result shape for every adapter, so backoff does not depend on which vendor refused."""
+
+from __future__ import annotations
+
+import email.utils
+import json
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+
+@dataclass(frozen=True)
+class Answer:
+    body: dict | None          # the parsed JSON object, when there is one
+    status: int | None         # HTTP status; None when no response arrived
+    why: str | None            # fixed-vocabulary failure word; never carries request content
+    retry_until: datetime | None = None
+
+
+def retry_until(value: str | None, now: datetime) -> datetime | None:
+    """`Retry-After` as a deadline: delta-seconds or an HTTP-date (RFC 9110 §10.2.3)."""
+    if not value:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return now + timedelta(seconds=int(value))
+    try:
+        t = email.utils.parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def get(url: str, headers: dict[str, str], now: datetime, timeout: float = 20) -> Answer:
+    req = urllib.request.Request(url, headers={"Accept": "application/json", **headers})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return Answer(None, e.code, f"http-{e.code}", retry_until(e.headers.get("Retry-After"), now))
+    except (urllib.error.URLError, OSError):
+        return Answer(None, None, "unreachable")
+    except ValueError:
+        return Answer(None, 200, "not-json")
+    if not isinstance(body, dict):
+        return Answer(None, 200, "not-an-object")
+    return Answer(body, 200, None)
