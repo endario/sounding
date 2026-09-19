@@ -30,7 +30,7 @@ def _default_dir() -> Path:
     return Path.home() / ".claude"
 
 
-def _identity(config_dir: Path) -> str | None:
+def account_of(config_dir: Path) -> str | None:
     for f in (config_dir / ".claude.json",) + ((Path.home() / ".claude.json",)
                                                if config_dir.resolve() == _default_dir().resolve() else ()):
         try:
@@ -90,7 +90,7 @@ def discover() -> list[Credential]:
     now = datetime.now(timezone.utc)
     found: dict[str, list[dict]] = {}
     for d in config_dirs():
-        who = _identity(d)
+        who = account_of(d)
         if who is not None:
             found.setdefault(who, []).extend(_oauth(d))
     best = {who: next((r for r in recs if (_expiry(r) or now) > now), recs[0] if recs else {})
@@ -120,7 +120,8 @@ def _severity_limits(body: dict, now: datetime) -> list[dict]:
                          used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
                          and resets is not None and resets > now else None,
                          resets_at=resets, held=None, severity=sev if isinstance(sev, str) else None,
-                         active=l.get("is_active") if isinstance(l.get("is_active"), bool) else None))
+                         active=l.get("is_active") if isinstance(l.get("is_active"), bool) else None,
+                         kind=l.get("kind") if isinstance(l.get("kind"), str) else None))
     return out
 
 
@@ -181,7 +182,7 @@ def capture(payload: dict, now: datetime) -> dict | None:
     response)."""
     rl = payload.get("rate_limits") if isinstance(payload, dict) else None
     d = Path(os.environ.get("CLAUDE_CONFIG_DIR") or _default_dir()).expanduser()
-    who = _identity(d)
+    who = account_of(d)
     if not isinstance(rl, dict) or who is None:
         return None
     out = []

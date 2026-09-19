@@ -173,6 +173,13 @@ class Contract(unittest.TestCase):
         self.assertEqual(transport.retry_until(str(10**9), NOW), NOW + transport.MAX_BACKOFF,
                          "a huge Retry-After must not block reads for years")
 
+    def test_a_zai_time_limit_is_not_named_as_a_usage_window(self):
+        body = {"success": True, "data": {"limits": [
+            {"type": "TIME_LIMIT", "unit": 3, "number": 5, "usage": 100, "currentValue": 5,
+             "nextResetTime": int((NOW + timedelta(hours=3)).timestamp() * 1000)}]}}
+        (l,) = zai.limits(body, NOW)
+        self.assertEqual((l["name"], l["kind"]), ("time_limit 3x5", "TIME_LIMIT"))
+
     def test_an_empty_zai_answer_is_unread_not_zero(self):
         from sounding.credential import Credential
         got = zai.read(Credential("a", {"key": "k"}), NOW,

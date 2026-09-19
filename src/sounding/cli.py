@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     for v in a.vendor or sorted(REGISTRY):
         out += cache.through(REGISTRY[v], max_age=a.max_age,
                              clock=lambda: datetime.now(timezone.utc), get=transport.get)
-    json.dump(out, sys.stdout, indent=None)
+    json.dump(out, sys.stdout)
     sys.stdout.write("\n")
     return 0
 

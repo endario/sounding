@@ -64,8 +64,11 @@ def limits(body: dict, now: datetime) -> list[dict]:
         used = (spent / total if _num(total) and _num(spent) and total > 0
                 and resets is not None and resets > now else None)
         # Z.ai has no word for a held limit short of the 429 at the cap, so `held` is unknown.
-        out.append(limit(NAMES.get(minutes) or f"{str(l.get('type')).lower()} {unit}x{number}",
-                         window_minutes=minutes, used_at_least=used, resets_at=resets, held=None))
+        kind = l.get("type") if isinstance(l.get("type"), str) else None
+        # Only a credit limit is a usage window; a TIME_LIMIT is the monthly tool quota.
+        name = NAMES.get(minutes) if kind == "CREDIT_LIMIT" else None
+        out.append(limit(name or f"{str(kind).lower()} {unit}x{number}", window_minutes=minutes,
+                         used_at_least=used, resets_at=resets, held=None, kind=kind))
     return out
 
 
