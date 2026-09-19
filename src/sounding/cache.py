@@ -35,8 +35,21 @@ def _write(path: Path, readings: list[dict]) -> None:
     os.replace(tmp, path)
 
 
+def _newer(a: dict | None, b: dict | None) -> dict | None:
+    if a is None or b is None:
+        return a or b
+    ta, tb = moment(a.get("taken_at")), moment(b.get("taken_at"))
+    return b if ta is None or (tb is not None and tb > ta) else a
+
+
+# A failure that says nothing about the account: the last good reading stays, keeping its own
+# `taken_at` so a consumer can see how old it is. An auth refusal is news and replaces it.
+TRANSIENT = frozenset({"unreachable", "not-json", "not-an-object"})
+
+
 def through(adapter, *, max_age: float, clock, get, directory: Path | None = None) -> list[dict]:
-    """This vendor's readings, from the cache when young enough, else asked upstream."""
+    """This vendor's readings: for each account, the newest of the cached reading and any local
+    source the adapter has, asking upstream only when neither is younger than `max_age`."""
     directory = directory or default_dir()
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = directory / f"{adapter.VENDOR}.json"
@@ -48,14 +61,23 @@ def through(adapter, *, max_age: float, clock, get, directory: Path | None = Non
         except (OSError, ValueError, AttributeError):
             held = None
         cached = {r.get("account"): r for r in held or [] if isinstance(r, dict)}
-        if cached and all(_backing_off(r, now) or (a := _age(r, now)) is not None and 0 <= a < max_age
-                          for r in cached.values()):
-            return [settled(r, now) for r in cached.values()]
+        local = {}
+        for r in getattr(adapter, "local", lambda now: [])(now):
+            local[r["account"]] = _newer(local.get(r["account"]), r)
         out = []
         for cred in adapter.discover():
             prior = cached.get(cred.account)
-            # A refusal's deadline binds every caller, whatever --max-age it asked for.
-            out.append(prior if prior is not None and _backing_off(prior, now)
-                       else adapter.read(cred, now, get))
+            best = _newer(prior if prior and prior.get("status") == "ok" else None,
+                          local.get(cred.account))
+            age = _age(best, now) if best else None
+            if best is not None and age is not None and 0 <= age < max_age:
+                out.append(best)
+            elif prior is not None and _backing_off(prior, now):
+                # A refusal's deadline binds every caller, whatever --max-age it asked for.
+                out.append(best or prior)
+            else:
+                got = adapter.read(cred, now, get)
+                keep = got["status"] != "ok" and got.get("why") in TRANSIENT and best is not None
+                out.append(best if keep else got)
         _write(path, out)
         return [settled(r, now) for r in out]

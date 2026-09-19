@@ -1,0 +1,174 @@
+"""Local sources, discovery and last-good retention. No network, no keychain."""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from sounding import cache, cli
+from sounding.adapters import anthropic, openai
+from sounding.credential import Credential
+from sounding.transport import Answer
+
+NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
+UUID = "11111111-2222-3333-4444-555555555555"
+RL = {"five_hour": {"used_percentage": 23.5, "resets_at": int((NOW + timedelta(hours=2)).timestamp())},
+      "seven_day": {"used_percentage": 41.2, "resets_at": int((NOW + timedelta(days=2)).timestamp())}}
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        p = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.tmp / "cache"), "HOME": str(self.home)})
+        p.start()
+        self.addCleanup(p.stop)
+        self.calls = []
+
+    def signed_in(self, name: str, uuid: str = UUID) -> Path:
+        d = self.home / name
+        d.mkdir()
+        (d / ".claude.json").write_text(json.dumps({"oauthAccount": {"accountUuid": uuid}}))
+        return d
+
+    def up(self, answer: Answer):
+        def get(url, headers, now):
+            self.calls.append(url)
+            return answer
+        return get
+
+
+class Statusline(Base):
+    def claude(self):
+        return SimpleNamespace(VENDOR="anthropic", local=anthropic.local, read=anthropic.read,
+                               discover=lambda: [Credential(UUID, {"token": "t", "expires": None})])
+
+    def test_a_fresh_capture_answers_without_asking_anthropic(self):
+        d = self.signed_in(".claude-account2")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(d)}):
+            anthropic.capture({"rate_limits": RL}, NOW)
+        got = cache.through(self.claude(), max_age=300, clock=lambda: NOW + timedelta(seconds=60),
+                            get=self.up(Answer(None, 429, "http-429")))[0]
+        self.assertEqual(self.calls, [], "the throttled endpoint must not be asked")
+        self.assertEqual(got["source"], "statusline")
+        by = {l["name"]: l["used_at_least"] for l in got["limits"]}
+        self.assertAlmostEqual(by["five_hour"], 0.235)
+        self.assertAlmostEqual(by["seven_day"], 0.412)
+
+    def test_a_stale_capture_falls_back_to_the_api(self):
+        d = self.signed_in(".claude-account2")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(d)}):
+            anthropic.capture({"rate_limits": RL}, NOW)
+        body = {"five_hour": {"utilization": 30, "resets_at": (NOW + timedelta(hours=2)).isoformat()}}
+        got = cache.through(self.claude(), max_age=300, clock=lambda: NOW + timedelta(minutes=10),
+                            get=self.up(Answer(body, 200, None)))[0]
+        self.assertEqual((self.calls, got["source"]), ([anthropic.URL], "api"))
+
+    def test_capture_without_rate_limits_writes_nothing_and_the_cli_stays_silent(self):
+        d = self.signed_in(".claude-account2")
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(d)}), \
+             mock.patch("sys.stdin", io.StringIO(json.dumps({"model": {}}))), \
+             mock.patch("sys.stdout", out):
+            self.assertEqual(cli.main(["capture", "claude-statusline"]), 0)
+            with mock.patch("sys.stdin", io.StringIO("not json")):
+                self.assertEqual(cli.main(["capture", "claude-statusline"]), 0)
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(anthropic.local(NOW), [])
+
+
+class Discovery(Base):
+    def test_one_credential_per_account_preferring_an_unexpired_token_and_skipping_wrapped_dirs(self):
+        self.signed_in(".claude-a")
+        self.signed_in(".claude-b")
+        glm = self.signed_in(".claude-glm", uuid="copied-from-another-account")
+        (self.home / ".config").mkdir()
+        (self.home / ".config" / "claude-glm.env").write_text(f"CLAUDE_CONFIG_DIR={glm}\n")
+        live = int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp() * 1000)
+        recs = {".claude-a": [{"accessToken": "old", "expiresAt": 1}],
+                ".claude-b": [{"accessToken": "new", "expiresAt": live}],
+                ".claude-glm": [{"accessToken": "glm", "expiresAt": live}]}
+        with mock.patch.object(anthropic, "_oauth", lambda d: recs.get(d.name, [])):
+            creds = anthropic.discover()
+        self.assertEqual([(c.account, c.secret["token"]) for c in creds], [(UUID, "new")])
+
+    def test_an_expired_token_is_not_sent(self):
+        got = anthropic.read(Credential(UUID, {"token": "t", "expires": 1}), NOW,
+                             self.up(Answer({}, 200, None)))
+        self.assertEqual((got["status"], got["why"], self.calls), ("unread", "credential-expired", []))
+
+
+class LastGood(Base):
+    def adapter(self, answer):
+        return SimpleNamespace(VENDOR="x", discover=lambda: [Credential("a", {})],
+                               read=lambda c, now, get: (
+                                   {"schema": 1, "vendor": "x", "account": "a", "taken_at": now.isoformat(),
+                                    "source": "api", "status": "ok", "why": None, "retry_until": None, "limits": []}
+                                   if answer is None else
+                                   {"schema": 1, "vendor": "x", "account": "a", "taken_at": now.isoformat(),
+                                    "source": "api", "status": answer[0], "why": answer[1],
+                                    "retry_until": None, "limits": []}))
+
+    def test_a_network_failure_keeps_the_last_good_reading_with_its_age(self):
+        cache.through(self.adapter(None), max_age=300, clock=lambda: NOW, get=None)
+        got = cache.through(self.adapter(("unread", "unreachable")), max_age=300,
+                            clock=lambda: NOW + timedelta(minutes=10), get=None)[0]
+        self.assertEqual((got["status"], got["taken_at"]), ("ok", NOW.isoformat()))
+
+    def test_an_auth_refusal_replaces_it(self):
+        cache.through(self.adapter(None), max_age=300, clock=lambda: NOW, get=None)
+        got = cache.through(self.adapter(("refused", "http-401")), max_age=300,
+                            clock=lambda: NOW + timedelta(minutes=10), get=None)[0]
+        self.assertEqual((got["status"], got["why"]), ("refused", "http-401"))
+
+
+class CodexSessionLog(Base):
+    def setUp(self):
+        super().setUp()
+        self.codex = self.tmp / "codex"
+        (self.codex / "sessions" / "2026").mkdir(parents=True)
+        (self.codex / "auth.json").write_text(json.dumps({"tokens": {"access_token": "t", "account_id": "acct"}}))
+        os.utime(self.codex / "auth.json", (NOW.timestamp() - 3600,) * 2)
+        p = mock.patch.dict(os.environ, {"CODEX_HOME": str(self.codex)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def log(self, name, events):
+        f = self.codex / "sessions" / "2026" / name
+        f.write_text("\n".join(json.dumps({"timestamp": at.isoformat().replace("+00:00", "Z"),
+                                           "type": "event_msg",
+                                           "payload": {"type": "token_count", "rate_limits": snap}})
+                               for at, snap in events))
+        os.utime(f, (NOW.timestamp(),) * 2)
+
+    def snap(self, limit_id, pct, name=None):
+        return {"limit_id": limit_id, "limit_name": name,
+                "primary": {"used_percent": pct, "window_minutes": 10080,
+                            "resets_at": int((NOW + timedelta(days=3)).timestamp())}, "secondary": None}
+
+    def test_limits_logged_in_separate_files_join_into_one_reading(self):
+        self.log("a.jsonl", [(NOW - timedelta(minutes=5), self.snap("codex", 26.0))])
+        self.log("b.jsonl", [(NOW - timedelta(minutes=1), self.snap("base_model_inference", 3.0, "gpt-reserve"))])
+        (r,) = openai.local(NOW)
+        self.assertEqual({l["name"]: l["used_at_least"] for l in r["limits"]}, {"codex": 0.26, "gpt-reserve": 0.03})
+        self.assertEqual(r["taken_at"], (NOW - timedelta(minutes=5)).isoformat(), "as old as its oldest part")
+
+    def test_no_reading_without_the_main_limit(self):
+        self.log("b.jsonl", [(NOW - timedelta(minutes=1), self.snap("base_model_inference", 3.0, "gpt-reserve"))])
+        self.assertEqual(openai.local(NOW), [])
+
+    def test_events_from_before_the_current_sign_in_are_ignored(self):
+        self.log("a.jsonl", [(NOW - timedelta(hours=2), self.snap("codex", 90.0))])
+        self.assertEqual(openai.local(NOW), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -91,3 +91,69 @@ def read(cred: Credential, now: datetime, get) -> dict:
     if ans.body is None:
         return failed(VENDOR, cred.account, now, ans)
     return reading(VENDOR, cred.account, now, OK, limits=limits(ans.body, now))
+
+
+def _session_limits(snap: dict, now: datetime) -> list[dict]:
+    """One `rate_limits` snapshot from a Codex session log, in the same shape `limits()` gives
+    `/wham/usage`."""
+    name = "codex" if snap.get("limit_id") == "codex" else str(snap.get("limit_name") or snap.get("limit_id"))
+    out = []
+    for which in ("primary", "secondary"):
+        w = snap.get(which)
+        if not isinstance(w, dict):
+            continue
+        resets = _seconds(w.get("resets_at"))
+        pct, mins = w.get("used_percent"), w.get("window_minutes")
+        reached = snap.get("rate_limit_reached_type") is not None
+        out.append(limit(
+            name if which == "primary" else f"{name} ({which})",
+            window_minutes=mins if isinstance(mins, int) and not isinstance(mins, bool) else None,
+            used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
+            and resets is not None and resets > now else None,
+            resets_at=resets, held=reached, held_why="limit_reached" if reached else None))
+    return out
+
+
+def local(now: datetime) -> list[dict]:
+    """The newest `rate_limits` Codex itself logged, with no network call.
+
+    A session log does not name its account, so only events written after auth.json last
+    changed are trusted to belong to the account signed in now. auth.json is also rewritten on
+    token refresh; that costs a network read, never a wrong attribution.
+    """
+    creds = discover()
+    if not creds or creds[0].account is None:
+        return []
+    try:
+        since = datetime.fromtimestamp((_home() / "auth.json").stat().st_mtime, tz=timezone.utc)
+        files = sorted((_home() / "sessions").rglob("*.jsonl"), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return []
+    # Codex logs each limit as its own event, so one file may hold only some of them: gather the
+    # newest of each across recent files.
+    latest: dict[str, tuple[datetime, dict]] = {}
+    for f in files[-5:]:
+        try:
+            if datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc) < since:
+                continue
+            lines = f.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if '"rate_limits"' not in line:
+                continue
+            try:
+                ev = json.loads(line)
+                snap = ev["payload"]["rate_limits"]
+                at = datetime.fromisoformat(ev["timestamp"].replace("Z", "+00:00"))
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+            key = str(snap.get("limit_id")) if isinstance(snap, dict) else None
+            if key and at > since and (key not in latest or at > latest[key][0]):
+                latest[key] = (at, snap)
+    # Without the main limit a reading would look complete while missing the one that matters.
+    if "codex" not in latest:
+        return []
+    taken = min(at for at, _ in latest.values())  # as old as its oldest part
+    found = [l for _, snap in latest.values() for l in _session_limits(snap, now)]
+    return [reading(VENDOR, creds[0].account, taken, OK, limits=found, source="session-log")]
