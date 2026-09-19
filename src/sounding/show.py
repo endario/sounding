@@ -61,7 +61,8 @@ def _forecast(p: dict, now: datetime, color: bool) -> str:
     if p.get("run_out") is not None:
         text += f" · {round(p['run_out'] * 100)}% chance of running out"
     n = p.get("past_windows") or 0
-    text += f" · from {n} past window{'s' * (n != 1)}" if n >= MIN_PAST else " · pace only"
+    if n >= MIN_PAST:
+        text += f" · from {n} past windows"
     return text
 
 
@@ -72,14 +73,14 @@ def render(readings: list[dict], now: datetime, *, color: bool = False, all_limi
         vendor = VENDOR_NAMES.get(r.get("vendor"), r.get("vendor"))
         who = labels.get(r.get("account")) or (r.get("account") or "?")[:8]
         taken = moment(r.get("taken_at"))
-        age = ("just read" if not taken or (now - taken).total_seconds() < 60
-               else f"read {_until(now, taken)} ago")
-        src = f", {r['source']}" if r.get("source") not in (None, "api") else ""
+        notes = [f"read {_until(now, taken)} ago"] if taken and (now - taken).total_seconds() >= 60 else []
+        if r.get("source") not in (None, "api"):
+            notes.append(r["source"])
         wait = moment(r.get("retry_until"))
         if r.get("status") == "ok" and wait and wait > now:
-            src += f", throttled: next read in {_until(wait, now)}"
+            notes.append(f"throttled: next read in {_until(wait, now)}")
         plan = _plan(r)
-        lines.append(f"{vendor}" + (f" {plan}" if plan else "") + f" · {who}" + (f"  ({age}{src})" if age else ""))
+        lines.append(f"{vendor}" + (f" {plan}" if plan else "") + f" · {who}" + (f"  ({', '.join(notes)})" if notes else ""))
         if r.get("status") != "ok":
             until = moment(r.get("retry_until"))
             lines.append(_paint(f"  not read: {r.get('why') or r.get('status')}"

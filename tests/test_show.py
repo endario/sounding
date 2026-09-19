@@ -20,7 +20,7 @@ class Render(unittest.TestCase):
                   severity="normal")])
         with mock.patch.object(show, "_claude_dirs", lambda: {}):
             out = show.render([r], NOW)
-        self.assertIn("Codex Pro · acct-123", out)
+        self.assertIn("Codex Pro · acct-123\n", out, "a fresh reading needs no note")
         self.assertIn("weekly", out)
         self.assertIn("50.0%", out)
         self.assertRegex(out, r"resets in +2d 0h")
@@ -34,7 +34,7 @@ class Render(unittest.TestCase):
     def test_a_throttled_account_shows_its_kept_reading_and_when_it_is_next_read(self):
         r = reading("zai", "z", NOW - timedelta(minutes=10), "ok", limits=[])
         r["retry_until"] = (NOW + timedelta(minutes=4)).isoformat()
-        self.assertIn("throttled: next read in 4m", show.render([r], NOW))
+        self.assertIn("(read 10m ago, throttled: next read in 4m)", show.render([r], NOW))
 
 
 if __name__ == "__main__":
