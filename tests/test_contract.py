@@ -170,6 +170,14 @@ class Contract(unittest.TestCase):
                          NOW + timedelta(minutes=2))
         self.assertEqual(transport.retry_until("30", NOW), NOW + timedelta(seconds=30))
         self.assertIsNone(transport.retry_until("soon", NOW))
+        self.assertEqual(transport.retry_until(str(10**9), NOW), NOW + transport.MAX_BACKOFF,
+                         "a huge Retry-After must not block reads for years")
+
+    def test_an_empty_zai_answer_is_unread_not_zero(self):
+        from sounding.credential import Credential
+        got = zai.read(Credential("a", {"key": "k"}), NOW,
+                       lambda u, h, n: Answer({"success": True, "data": {}}, 200, None))
+        self.assertEqual((got["status"], got["why"]), ("unread", "no-limits"))
 
 
 if __name__ == "__main__":

@@ -18,18 +18,25 @@ class Answer:
     retry_until: datetime | None = None
 
 
+# A refusal never blocks for longer than this, so a bad header or a clock jump cannot stop reads
+# indefinitely.
+MAX_BACKOFF = timedelta(hours=24)
+
+
 def retry_until(value: str | None, now: datetime) -> datetime | None:
     """`Retry-After` as a deadline: delta-seconds or an HTTP-date (RFC 9110 §10.2.3)."""
     if not value:
         return None
     value = value.strip()
     if value.isdigit():
-        return now + timedelta(seconds=int(value))
-    try:
-        t = email.utils.parsedate_to_datetime(value)
-    except (TypeError, ValueError):
-        return None
-    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+        t = now + timedelta(seconds=min(int(value), int(MAX_BACKOFF.total_seconds())))
+    else:
+        try:
+            t = email.utils.parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError):
+            return None
+        t = t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    return min(t, now + MAX_BACKOFF)
 
 
 def get(url: str, headers: dict[str, str], now: datetime, timeout: float = 20) -> Answer:

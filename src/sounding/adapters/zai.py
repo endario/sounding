@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..credential import Credential
-from ..schema import OK, REFUSED, failed, limit, reading
+from ..schema import OK, REFUSED, UNREAD, failed, limit, reading
 
 VENDOR = "zai"
 URL = "https://api.z.ai/api/monitor/usage/quota/limit"
@@ -77,4 +77,9 @@ def read(cred: Credential, now: datetime, get) -> dict:
         code = ans.body.get("code")
         return reading(VENDOR, cred.account, now, REFUSED,
                        why=f"vendor-{code}" if isinstance(code, int) else "vendor-refused")
-    return reading(VENDOR, cred.account, now, OK, limits=limits(ans.body, now))
+    found = limits(ans.body, now)
+    if not found:
+        # An empty answer is unknown, never "nothing used". Z.ai answers success with empty data
+        # for a team key sent without its organisation headers.
+        return reading(VENDOR, cred.account, now, UNREAD, why="no-limits")
+    return reading(VENDOR, cred.account, now, OK, limits=found)
