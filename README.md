@@ -28,6 +28,16 @@ The network endpoints are not officially documented and may change without notic
 reads each harness's credential where the harness keeps it. It never refreshes a token or
 writes a credential, and no token appears in its output, cache or errors.
 
+## Projection
+
+Each limit also carries a `projection`: where the window is heading, from the readings sounding
+has taken of it. `at_reset` is `[low, high]` of two paces extended to the reset — the window's
+average so far and its last seventh (a day of a week) — unclamped, so `1.07` means that pace
+passes the limit. `exhausts_at` is when the faster pace reaches the limit, if before the reset.
+`samples` and `since` say what it rests on. It is `null` until a window is a fiftieth elapsed.
+The history lives in the vendor's cache file and starts over at each reset, so a projection is
+only as good as how often something reads: a statusline `capture` feeds it continuously.
+
 ## Cache
 
 There is one cache file and one `flock` per vendor under `$XDG_CACHE_HOME/sounding`, mode

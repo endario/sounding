@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from . import projection
 from .schema import moment, settled
 
 
@@ -27,11 +28,11 @@ def _backing_off(r: dict, now: datetime) -> bool:
     return until is not None and until > now
 
 
-def _write(path: Path, readings: list[dict]) -> None:
+def _write(path: Path, readings: list[dict], history: dict) -> None:
     tmp = path.with_suffix(".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
-        json.dump({"readings": readings}, f)
+        json.dump({"readings": readings, "history": history}, f)
     os.replace(tmp, path)
 
 
@@ -57,9 +58,11 @@ def through(adapter, *, max_age: float, clock, get, directory: Path | None = Non
         fcntl.flock(lock, fcntl.LOCK_EX)
         now = clock()  # after the wait: a reader that queued behind a fresh read sees it as fresh
         try:
-            held = json.loads(path.read_text()).get("readings")
+            body = json.loads(path.read_text())
+            held, history = body.get("readings"), body.get("history")
         except (OSError, ValueError, AttributeError):
-            held = None
+            held, history = None, None
+        history = history if isinstance(history, dict) else {}
         cached = {r.get("account"): r for r in held or [] if isinstance(r, dict)}
         local = {}
         for r in getattr(adapter, "local", lambda now: [])(now):
@@ -82,5 +85,6 @@ def through(adapter, *, max_age: float, clock, get, directory: Path | None = Non
                 got = adapter.read(cred, now, get)
                 keep = got["status"] != "ok" and got.get("why") in TRANSIENT and best is not None
                 out.append(best if keep else got)
-        _write(path, out)
-        return [settled(r, now) for r in out]
+        history = projection.prune(projection.record(history, out), now)
+        _write(path, out, history)
+        return [projection.attach(settled(r, now), history) for r in out]

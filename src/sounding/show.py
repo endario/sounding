@@ -81,6 +81,12 @@ def render(readings: list[dict], now: datetime, *, color: bool = False, all_limi
             when = (f"resets in {_until(resets, now):>7}  ({resets.astimezone():%a %H:%M})"
                     if resets else "no window open")
             flag = f"  HELD: {l.get('held_why') or 'yes'}" if held else ""
+            proj = l.get("projection")
+            if proj and not held:
+                lo, hi = (round(x * 100) for x in proj["at_reset"])
+                ends = moment(proj.get("exhausts_at"))
+                flag = "  → " + _paint(f"{lo}%" if lo == hi else f"{lo}–{hi}%", hi / 100, None, color) \
+                    + " at reset" + (f", full in {_until(ends, now)}" if ends and ends > now else ", full" if ends else "")
             lines.append(f"  {name:<15} " + _paint(f"{bar} {pct}", used, held, color) + f"  {when}{flag}")
         if not shown:
             lines.append("  no usage windows reported")

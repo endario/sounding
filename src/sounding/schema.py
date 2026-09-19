@@ -1,4 +1,5 @@
-"""The reading shape (schema 1). Facts only: no band, no advice, no free-form detail."""
+"""The reading shape (schema 1). Facts only: no band, no advice, no free-form detail. Each limit
+also carries a `projection` (see projection.py): arithmetic on past readings, never advice."""
 
 from __future__ import annotations
 
