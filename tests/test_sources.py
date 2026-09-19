@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from sounding import cache, cli
-from sounding.adapters import anthropic, openai
+from sounding.adapters import anthropic, opencode, openai
 from sounding.credential import Credential
 from sounding.transport import Answer
 
@@ -137,6 +137,35 @@ class Discovery(Base):
         got = anthropic.read(Credential(UUID, {"token": "t", "expires": 1}), NOW,
                              self.up(Answer({}, 200, None)))
         self.assertEqual((got["status"], got["why"], self.calls), ("unread", "credential-expired", []))
+
+
+class OpenCodeGo(Base):
+    BODY = {"usage": {
+        "rolling": {"status": "ok", "percent": 37, "resetsAt": (NOW + timedelta(hours=2)).isoformat()},
+        "weekly": {"status": "rate-limited", "percent": 100, "resetsAt": (NOW + timedelta(days=2)).isoformat()},
+        "monthly": {"status": "ok", "percent": 61, "resetsAt": (NOW + timedelta(days=20)).isoformat()}}}
+
+    def test_three_windows_with_usage_reset_and_the_vendors_hold(self):
+        got = opencode.read(Credential("a", {"key": "k"}), NOW, self.up(Answer(self.BODY, 200, None)))
+        by = {l["name"]: (l["window_minutes"], l["used_at_least"], l["held"]) for l in got["limits"]}
+        self.assertEqual(by, {"five_hour": (300, 0.37, False), "seven_day": (10080, 1.0, True),
+                              "month": (43200, 0.61, False)})
+        self.assertEqual(got["limits"][0]["resets_at"], (NOW + timedelta(hours=2)).isoformat())
+
+    def test_a_key_without_go_is_no_subscription_not_a_refusal(self):
+        got = opencode.read(Credential("a", {"key": "k"}), NOW, self.up(Answer(None, 403, "http-403")))
+        self.assertEqual((got["status"], got["why"]), ("unread", "no-subscription"))
+
+    def test_the_go_key_is_found_in_opencodes_auth_file_and_never_shown(self):
+        d = self.tmp / "data" / "opencode"
+        d.mkdir(parents=True)
+        (d / "auth.json").write_text(json.dumps({"openai": {"type": "oauth", "access": "x"},
+                                                 "opencode-go": {"type": "api", "key": "go-secret"}}))
+        with mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(self.tmp / "data")}):
+            os.environ.pop("OPENCODE_API_KEY", None)
+            (c,) = opencode.discover()
+        self.assertEqual(c.secret["key"], "go-secret")
+        self.assertNotIn("go-secret", repr(c) + c.account)
 
 
 class LastGood(Base):
