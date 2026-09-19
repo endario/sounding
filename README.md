@@ -19,6 +19,7 @@ the consumer.
 | Anthropic (Claude Code, claude.ai sign-in) | the `rate_limits` Claude Code hands its statusline, via `capture` | `oauth/usage` on Claude Code's own token |
 | OpenAI (Codex, ChatGPT sign-in) | `rate_limits` in Codex's session logs | `wham/usage` on Codex's own token |
 | Z.ai (GLM coding plan) | — | `quota/limit` on the plan's API key |
+| OpenCode Go | — | `zen/go/v1/usage` on the Go API key (unverified live) |
 
 The network endpoints are not officially documented and may change without notice. sounding
 reads each harness's credential where the harness keeps it. It never refreshes a token or
