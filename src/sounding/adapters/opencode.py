@@ -2,7 +2,7 @@
 
 Go meters dollars of token cost in three windows: a rolling five hours, a UTC calendar week and a
 month anchored to the subscription. The endpoint answers each as a whole percent, a reset and a
-status. Unverified live: shape taken from sst/opencode's console source (2026-09-19)."""
+status. Verified live 2026-09-19."""
 
 from __future__ import annotations
 

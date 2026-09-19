@@ -179,6 +179,20 @@ class Contract(unittest.TestCase):
         mode = (self.tmp / "cache" / "sounding" / "zai.json").stat().st_mode & 0o777
         self.assertEqual(mode, 0o600)
 
+    def test_every_request_names_this_tool_not_python_urllib(self):
+        seen = {}
+
+        class Body(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def urlopen(req, timeout):
+            seen.update(req.headers)
+            return Body(b"{}")
+        with mock.patch.object(transport.urllib.request, "urlopen", urlopen):
+            transport.get("https://example.test", {"Authorization": "Bearer x"}, NOW)
+        self.assertEqual(seen.get("User-agent"), transport.USER_AGENT)
+
     def test_retry_after_accepts_http_date(self):
         self.assertEqual(transport.retry_until("Sat, 19 Sep 2026 12:02:00 GMT", NOW),
                          NOW + timedelta(minutes=2))

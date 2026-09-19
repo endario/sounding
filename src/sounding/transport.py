@@ -18,6 +18,8 @@ class Answer:
     retry_until: datetime | None = None
 
 
+USER_AGENT = "sounding (+https://github.com/endario/sounding)"
+
 # A refusal never blocks for longer than this, so a bad header or a clock jump cannot stop reads
 # indefinitely.
 MAX_BACKOFF = timedelta(hours=24)
@@ -40,7 +42,10 @@ def retry_until(value: str | None, now: datetime) -> datetime | None:
 
 
 def get(url: str, headers: dict[str, str], now: datetime, timeout: float = 20) -> Answer:
-    req = urllib.request.Request(url, headers={"Accept": "application/json", **headers})
+    # Python-urllib's default User-Agent is refused by some vendors' edges (opencode.ai answers
+    # it 403), so every request names this tool.
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": USER_AGENT,
+                                               **headers})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = json.loads(r.read())
