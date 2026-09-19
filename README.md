@@ -31,12 +31,16 @@ writes a credential, and no token appears in its output, cache or errors.
 ## Projection
 
 Each limit also carries a `projection`: where the window is heading, from the readings sounding
-has taken of it. `at_reset` is `[low, high]` of two paces extended to the reset — the window's
-average so far and its last seventh (a day of a week) — unclamped, so `1.07` means that pace
-passes the limit. `exhausts_at` is when the faster pace reaches the limit, if before the reset.
-`samples` and `since` say what it rests on. It is `null` until a window is a fiftieth elapsed.
-The history lives in the vendor's cache file and starts over at each reset, so a projection is
-only as good as how often something reads: a statusline `capture` feeds it continuously.
+has taken. Within the window, two paces are extended to the reset — the average since it opened,
+and a recency-weighted pace with a half-life of a fourteenth of the window, which rises with a
+burst and falls in a quiet spell. Past windows of the same limit, kept for eight windows, add the shape of use (quiet nights, busy Mondays): each one's use from this point to
+its end, shifted to today's. They take over from the paces between the third and eighth window.
+
+`at_reset` is `[low, high]`, unclamped, so `1.07` means use would pass the limit. `exhausts_at`
+is when the high end reaches it, if before the reset. `run_out` is how likely use passes it, from the past
+windows that did, or `null` without them. `samples`, `past_windows` and `since` say
+what it rests on. A projection is only as good as how often something reads: a statusline
+`capture` feeds it continuously.
 
 ## Cache
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from sounding import cache, projection, show
-from sounding.schema import limit, reading
+from sounding.schema import limit, moment, reading
 from sounding.transport import Answer
 from sounding.adapters import zai
 
@@ -48,7 +48,14 @@ class Project(unittest.TestCase):
         lo, hi = p["at_reset"]
         self.assertLess(lo, 1)
         self.assertGreater(hi, 1)
-        self.assertEqual(p["exhausts_at"], (NOW + timedelta(days=2.2)).isoformat())
+        self.assertLess(moment(p["exhausts_at"]), RESET)
+
+    def test_a_quiet_spell_lowers_the_recent_pace_below_the_average(self):
+        # 40% in the first three days, nothing in the last one.
+        h = history((NOW - timedelta(days=1), 0.4), (NOW, 0.4))
+        lo, hi = proj(h, NOW, 0.4)["at_reset"]
+        self.assertAlmostEqual(lo, 0.463, places=3)  # the three busy days, half-lives back
+        self.assertAlmostEqual(hi, 0.7)
 
     def test_one_reading_gives_only_the_average_pace(self):
         p = proj(history((NOW, 0.4)), NOW, 0.4)
@@ -62,26 +69,85 @@ class Project(unittest.TestCase):
     def test_a_reset_starts_the_history_over(self):
         h = history((NOW - timedelta(days=1), 0.9))
         h = projection.record(h, [at(NOW, 0.05, resets=NOW + timedelta(days=7) - timedelta(hours=1))])
-        self.assertEqual(len(h["a\tseven_day"]), 1)
+        self.assertEqual(len(h["a\tseven_day"]["samples"]), 1)
 
     def test_readings_closer_than_the_sampling_step_are_not_kept(self):
         h = history((NOW, 0.4), (NOW + timedelta(minutes=5), 0.41))
-        self.assertEqual(len(h["a\tseven_day"]), 1)
+        self.assertEqual(len(h["a\tseven_day"]["samples"]), 1)
 
-    def test_windows_that_have_reset_are_pruned(self):
-        h = history((NOW, 0.4))
+    def test_a_window_read_only_partway_is_not_kept_as_a_past_window(self):
+        h = history((NOW - timedelta(days=2), 0.2), (NOW - timedelta(days=1), 0.3), (NOW, 0.4))
         self.assertEqual(projection.prune(h, RESET + timedelta(seconds=1)), {})
+
+    def test_a_window_read_to_its_end_is_kept_as_a_past_window_at_reset(self):
+        h = history(*[(RESET - timedelta(days=d), 0.1 * (7 - d)) for d in (3, 2, 1, 0.5)])
+        h = projection.prune(h, RESET + timedelta(seconds=1))
+        self.assertEqual(h["a\tseven_day"]["samples"], [])
+        curve = h["a\tseven_day"]["past"][0]["curve"]
+        self.assertEqual((curve[0], curve[-1]), (0.0, 0.65))
+
+    def test_a_reset_moved_back_restarts_the_window_without_archiving_it(self):
+        h = history(*[(RESET - timedelta(days=d), 0.1) for d in (3, 2, 1)])
+        h = projection.record(h, [at(RESET - timedelta(hours=20), 0.2, resets=RESET - timedelta(hours=1))])
+        self.assertEqual((len(h["a\tseven_day"]["samples"]), h["a\tseven_day"]["past"]), (1, []))
+
+    def test_a_window_is_archived_at_its_own_length_when_the_next_one_differs(self):
+        h = history(*[(RESET - timedelta(days=d), 0.1 * (7 - d)) for d in (3, 2, 1, 0.5)])
+        nxt = reading("zai", "a", RESET + timedelta(hours=1), "ok", limits=[
+            limit("seven_day", window_minutes=300, used_at_least=0.01, resets_at=RESET + timedelta(hours=5), held=False)])
+        self.assertEqual(len(projection.record(h, [nxt])["a\tseven_day"]["past"]), 1)
+
+    def test_the_old_bare_sample_list_still_reads(self):
+        h = {"a\tseven_day": [[NOW.isoformat(), 0.4, RESET.isoformat()]]}
+        self.assertEqual(proj(h, NOW, 0.4)["at_reset"], [0.7, 0.7])
 
     def test_a_malformed_history_is_ignored_not_fatal(self):
         h = {"a\tseven_day": [["x", 0.1, None], "junk", [1, 2]]}
         self.assertIsNone(proj(h, NOW, 0.4))
-        self.assertEqual(len(projection.record(h, [at(NOW, 0.4)])["a\tseven_day"]), 1)
+        self.assertEqual(len(projection.record(h, [at(NOW, 0.4)])["a\tseven_day"]["samples"]), 1)
         self.assertEqual(projection.prune({"k": "junk"}, NOW), {})
 
     def test_a_window_past_its_reset_is_not_projected(self):
         from sounding.schema import settled
         r = settled(at(NOW, 0.4), RESET + timedelta(seconds=1))
         self.assertIsNone(projection.attach(r, history((NOW, 0.4)))["limits"][0]["projection"])
+
+
+def past(*shapes):
+    """Past weekly windows, newest last, each a function of the elapsed fraction to use."""
+    return [{"resets_at": (RESET - timedelta(weeks=len(shapes) - i)).isoformat(),
+             "curve": [round(f(i / projection.GRID), 4) for i in range(projection.GRID + 1)]}
+            for i, f in enumerate(shapes)]
+
+
+class FromPastWindows(unittest.TestCase):
+    def entry(self, shapes, used=0.4):
+        return {"a\tseven_day": {"samples": [[NOW.isoformat(), used, RESET.isoformat()]], "past": past(*shapes)}}
+
+    def test_past_windows_that_went_quiet_late_pull_the_projection_down(self):
+        # Every past week used 40% by this point and nothing after: a front-loaded shape.
+        front = lambda x: min(x / (4 / 7), 1) * 0.4
+        p = proj(self.entry([front] * 8), NOW, 0.4)
+        self.assertLess(p["at_reset"][1], 0.5)
+        self.assertLess(p["run_out"], 0.2)
+        self.assertIsNone(p["exhausts_at"])
+
+    def test_past_windows_that_ran_out_say_so_and_when(self):
+        # Every past week was back-loaded: 40% by now, then 100% two days later.
+        back = lambda x: 0.4 * x / (4 / 7) if x <= 4 / 7 else min(0.4 + 0.6 * (x - 4 / 7) / (2 / 7), 1.0)
+        p = proj(self.entry([back] * 8), NOW, 0.4)
+        self.assertGreater(p["at_reset"][0], 1)
+        self.assertGreater(p["run_out"], 0.8)
+        self.assertAlmostEqual((moment(p["exhausts_at"]) - NOW) / timedelta(days=1), 2, delta=0.1)
+
+    def test_too_few_past_windows_leave_the_paces_in_charge(self):
+        front = lambda x: min(x / (4 / 7), 1) * 0.4
+        self.assertEqual(proj(self.entry([front]), NOW, 0.4)["at_reset"], [0.7, 0.7])
+
+    def test_a_past_window_that_hit_its_limit_counts_its_unspent_demand(self):
+        capped = lambda x: min(x * 1.4, 1.0)  # would have used 140%
+        c = projection._extended(past(capped)[0]["curve"])
+        self.assertAlmostEqual(c[-1], 1.4, delta=0.01)
 
 
 class ThroughCache(unittest.TestCase):
@@ -100,7 +166,8 @@ class ThroughCache(unittest.TestCase):
             out = cache.through(zai, max_age=60, clock=lambda: NOW, get=get)
         p = next(l for l in out[0]["limits"] if l["window_minutes"] == WEEK)["projection"]
         self.assertEqual(p["samples"], 2)
-        self.assertEqual(p["at_reset"], [0.7, 1.0])
+        self.assertEqual(p["at_reset"][0], 0.7)
+        self.assertGreater(p["at_reset"][1], 0.7)
 
 
 class Shown(unittest.TestCase):
@@ -108,7 +175,7 @@ class Shown(unittest.TestCase):
         r = projection.attach(at(NOW, 0.45), history((NOW - timedelta(days=1), 0.2), (NOW, 0.45)))
         with mock.patch.object(show, "_claude_dirs", lambda: {}):
             out = show.render([r], NOW)
-        self.assertRegex(out, r"→ \d+–\d+% at reset, full in 2d 4h")
+        self.assertRegex(out, r"→ \d+–\d+% at reset, full in \d+d \d+h")
 
     def test_a_held_row_says_held_not_where_it_is_heading(self):
         r = projection.attach(at(NOW, 0.45), history((NOW, 0.45)))
