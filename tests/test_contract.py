@@ -130,6 +130,24 @@ class Contract(unittest.TestCase):
                 self.assertEqual(len(self.up.calls), 2)
                 self.now, self.up.refuse = NOW, 429
 
+    def test_a_refused_account_keeps_its_deadline_while_a_stale_sibling_is_re_asked(self):
+        from types import SimpleNamespace
+        from sounding.credential import Credential
+        from sounding.schema import reading
+        asked = []
+        two = SimpleNamespace(VENDOR="zai", discover=lambda: [
+            Credential("a", {"key": "k-a"}), Credential("b", {"key": "k-b"})],
+            read=lambda cred, now, get: (asked.append(cred.account), zai.read(cred, now, self.up))[1])
+        taken = NOW - timedelta(seconds=60)
+        seed = [reading("zai", "a", taken, "refused", why="http-429",
+                        retry_until=NOW + timedelta(seconds=60)),
+                reading("zai", "b", taken, "ok")]
+        d = self.tmp / "cache" / "sounding"
+        d.mkdir(parents=True)
+        (d / "zai.json").write_text(json.dumps({"readings": seed}))
+        self.read(two, max_age=30)
+        self.assertEqual(asked, ["b"], "the stale sibling is re-asked; the refused one waits")
+
     def test_no_secret_reaches_output_or_cache(self):
         for vendor in (openai, zai):
             self.read(vendor)
