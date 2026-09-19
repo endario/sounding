@@ -71,6 +71,9 @@ def through(adapter, *, max_age: float, clock, get, directory: Path | None = Non
                           local.get(cred.account))
             age = _age(best, now) if best else None
             if best is not None and age is not None and 0 <= age < max_age:
+                # A local source names no plan; the account's plan does not change with its source.
+                if best.get("plan") is None and prior is not None and prior.get("plan") is not None:
+                    best = dict(best, plan=prior["plan"])
                 out.append(best)
             elif prior is not None and _backing_off(prior, now):
                 # A refusal's deadline binds every caller, whatever --max-age it asked for.

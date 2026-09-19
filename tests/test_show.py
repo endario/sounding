@@ -1,0 +1,36 @@
+"""The status view: what a person sees for each account."""
+
+from __future__ import annotations
+
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest import mock
+
+from sounding import show
+from sounding.schema import limit, reading
+
+NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
+
+
+class Render(unittest.TestCase):
+    def test_windows_show_with_plan_and_reset_and_severity_entries_stay_hidden(self):
+        r = reading("openai", "acct-1234567", NOW, "ok", plan="pro", limits=[
+            limit("codex", window_minutes=10080, used_at_least=0.5, resets_at=NOW + timedelta(days=2), held=False),
+            limit("limits:session", window_minutes=300, used_at_least=0.1, resets_at=None, held=None,
+                  severity="normal")])
+        with mock.patch.object(show, "_claude_dirs", lambda: {}):
+            out = show.render([r], NOW)
+        self.assertIn("Codex Pro · acct-123", out)
+        self.assertIn("weekly", out)
+        self.assertIn("50.0%", out)
+        self.assertRegex(out, r"resets in +2d 0h")
+        self.assertNotIn("limits:session", out)
+        self.assertIn("limits:session", show.render([r], NOW, all_limits=True))
+
+    def test_an_unread_account_says_why(self):
+        r = reading("zai", "z", NOW, "refused", why="http-429", retry_until=NOW + timedelta(minutes=5))
+        self.assertIn("not read: http-429, retry in 5m", show.render([r], NOW))
+
+
+if __name__ == "__main__":
+    unittest.main()

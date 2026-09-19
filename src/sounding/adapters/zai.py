@@ -85,4 +85,5 @@ def read(cred: Credential, now: datetime, get) -> dict:
         # An empty answer is unknown, never "nothing used". Z.ai answers success with empty data
         # for a team key sent without its organisation headers.
         return reading(VENDOR, cred.account, now, UNREAD, why="no-limits")
-    return reading(VENDOR, cred.account, now, OK, limits=found)
+    level = (ans.body.get("data") or {}).get("level") if isinstance(ans.body.get("data"), dict) else None
+    return reading(VENDOR, cred.account, now, OK, limits=found, plan=level if isinstance(level, str) else None)

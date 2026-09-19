@@ -40,9 +40,10 @@ def limit(name: str, *, window_minutes: int | None, used_at_least: float | None,
 
 def reading(vendor: str, account: str | None, taken_at: datetime, status: str, *,
             why: str | None = None, retry_until: datetime | None = None,
-            limits: list[dict] | None = None, source: str = "api") -> dict:
+            limits: list[dict] | None = None, source: str = "api", plan: str | None = None) -> dict:
+    # `plan` is the vendor's own word for the subscription, verbatim (e.g. `default_claude_max_5x`).
     return {"schema": SCHEMA, "vendor": vendor, "account": account, "taken_at": iso(taken_at),
-            "source": source, "status": status, "why": why, "retry_until": iso(retry_until), "limits": limits or []}
+            "source": source, "plan": plan, "status": status, "why": why, "retry_until": iso(retry_until), "limits": limits or []}
 
 
 def settled(r: dict, now: datetime) -> dict:

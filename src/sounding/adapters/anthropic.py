@@ -22,6 +22,7 @@ from ..schema import OK, UNREAD, failed, limit, reading
 
 VENDOR = "anthropic"
 URL = "https://api.anthropic.com/api/oauth/usage"
+PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
 WINDOWS = {"five_hour": 300, "seven_day": 10080, "seven_day_opus": 10080, "seven_day_sonnet": 10080}
 KEYCHAIN = "Claude Code-credentials"
 
@@ -106,6 +107,11 @@ GROUP_MINUTES = {"session": 300, "weekly": 10080}
 def _severity_limits(body: dict, now: datetime) -> list[dict]:
     """Anthropic's second vocabulary: the account's own severity for each limit it applies,
     and whether it is applying it now. Kept verbatim; no threshold is drawn on it here."""
+    if body.get("limits") == []:
+        # Asked, and the account names no limit it applies: its own word that nothing holds it,
+        # which a missing list does not say.
+        return [limit("limits:none", window_minutes=None, used_at_least=None, resets_at=None,
+                      held=False, held_why=None, kind="none")]
     out = []
     for l in body.get("limits") if isinstance(body.get("limits"), list) else []:
         if not isinstance(l, dict):
@@ -166,7 +172,12 @@ def read(cred: Credential, now: datetime, get) -> dict:
     ans = get(URL, {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"}, now)
     if ans.body is None:
         return failed(VENDOR, cred.account, now, ans)
-    return reading(VENDOR, cred.account, now, OK,
+    # The plan is the organisation's current rate-limit tier. The keychain keeps the tier from
+    # sign-in time, which goes stale on an upgrade, so it is asked for; a failure costs only it.
+    prof = get(PROFILE_URL, {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"}, now)
+    org = (prof.body or {}).get("organization") if isinstance((prof.body or {}).get("organization"), dict) else {}
+    tier = org.get("rate_limit_tier") if isinstance(org.get("rate_limit_tier"), str) else None
+    return reading(VENDOR, cred.account, now, OK, plan=tier,
                    limits=_limits(ans.body, now) + _severity_limits(ans.body, now))
 
 

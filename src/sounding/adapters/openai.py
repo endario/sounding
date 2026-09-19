@@ -90,7 +90,9 @@ def read(cred: Credential, now: datetime, get) -> dict:
                     "ChatGPT-Account-Id": str(cred.secret["account_id"])}, now)
     if ans.body is None:
         return failed(VENDOR, cred.account, now, ans)
-    return reading(VENDOR, cred.account, now, OK, limits=limits(ans.body, now))
+    plan = ans.body.get("plan_type")
+    return reading(VENDOR, cred.account, now, OK, limits=limits(ans.body, now),
+                   plan=plan if isinstance(plan, str) else None)
 
 
 def _session_limits(snap: dict, now: datetime) -> list[dict]:

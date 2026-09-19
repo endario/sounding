@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from sounding import cache, cli
-from sounding.adapters import anthropic, opencode, openai
+from sounding.adapters import anthropic, opencode, openai, xai
 from sounding.credential import Credential
 from sounding.transport import Answer
 
@@ -70,7 +70,7 @@ class Statusline(Base):
         body = {"five_hour": {"utilization": 30, "resets_at": (NOW + timedelta(hours=2)).isoformat()}}
         got = cache.through(self.claude(), max_age=300, clock=lambda: NOW + timedelta(minutes=10),
                             get=self.up(Answer(body, 200, None)))[0]
-        self.assertEqual((self.calls, got["source"]), ([anthropic.URL], "api"))
+        self.assertEqual((self.calls, got["source"]), ([anthropic.URL, anthropic.PROFILE_URL], "api"))
 
     def test_capture_without_rate_limits_writes_nothing_and_the_cli_stays_silent(self):
         d = self.signed_in(".claude-account2")
@@ -108,6 +108,39 @@ class Discovery(Base):
         self.assertEqual((by["five_hour"]["used_at_least"], by["five_hour"]["resets_at"], by["five_hour"]["held"]),
                          (0.43, (NOW + timedelta(hours=2)).isoformat(), False))
         self.assertEqual((by["seven_day"]["held"], by["seven_day"]["held_why"]), (True, "weekly_limit"))
+
+    def test_the_plan_is_the_organisations_current_tier_and_its_absence_costs_only_the_plan(self):
+        usage = {"five_hour": {"utilization": 10.0, "resets_at": (NOW + timedelta(hours=2)).isoformat()}}
+
+        def get(url, headers, now):
+            if url == anthropic.PROFILE_URL:
+                return Answer({"organization": {"rate_limit_tier": "default_claude_max_5x"}}, 200, None)
+            return Answer(usage, 200, None)
+        cred = Credential(UUID, {"token": "t", "expires": None})
+        self.assertEqual(anthropic.read(cred, NOW, get)["plan"], "default_claude_max_5x")
+        down = anthropic.read(cred, NOW, lambda u, h, n: Answer(usage, 200, None) if u == anthropic.URL
+                              else Answer(None, 403, "http-403"))
+        self.assertEqual((down["status"], down["plan"]), ("ok", None))
+
+    def test_an_empty_limits_list_is_the_accounts_word_that_nothing_holds_it(self):
+        cred = Credential(UUID, {"token": "t", "expires": None})
+        said = anthropic.read(cred, NOW, self.up(Answer({"limits": []}, 200, None)))
+        silent = anthropic.read(cred, NOW, self.up(Answer({}, 200, None)))
+        self.assertEqual([(l["name"], l["held"], l["kind"]) for l in said["limits"]], [("limits:none", False, "none")])
+        self.assertEqual(silent["limits"], [])
+
+    def test_a_fresh_capture_keeps_the_plan_the_api_named(self):
+        d = self.signed_in(".claude-account2")
+        claude = SimpleNamespace(VENDOR="anthropic", local=anthropic.local, read=anthropic.read,
+                                 discover=lambda: [Credential(UUID, {"token": "t", "expires": None})])
+        def get(url, headers, now):
+            return Answer({"organization": {"rate_limit_tier": "default_claude_max_5x"}} if url == anthropic.PROFILE_URL
+                          else {"five_hour": {"utilization": 1, "resets_at": (NOW + timedelta(hours=1)).isoformat()}}, 200, None)
+        cache.through(claude, max_age=300, clock=lambda: NOW, get=get)
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(d)}):
+            anthropic.capture({"rate_limits": RL}, NOW + timedelta(seconds=30))
+        got = cache.through(claude, max_age=300, clock=lambda: NOW + timedelta(seconds=40), get=get)[0]
+        self.assertEqual((got["source"], got["plan"]), ("statusline", "default_claude_max_5x"))
 
     def test_the_accounts_own_severity_is_kept_verbatim(self):
         body = {"limits": [
@@ -166,6 +199,31 @@ class OpenCodeGo(Base):
             (c,) = opencode.discover()
         self.assertEqual(c.secret["key"], "go-secret")
         self.assertNotIn("go-secret", repr(c) + c.account)
+
+
+class Grok(Base):
+    BODY = {"config": {"currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY",
+                                         "start": (NOW - timedelta(days=2)).isoformat(),
+                                         "end": (NOW + timedelta(days=5)).isoformat()},
+                       "creditUsagePercent": 28.0}}
+
+    def test_the_weekly_period_with_usage_and_reset(self):
+        got = xai.read(Credential("u", {"key": "k", "expires": None}), NOW, self.up(Answer(self.BODY, 200, None)))
+        (l,) = got["limits"]
+        self.assertEqual((l["name"], l["window_minutes"], l["used_at_least"], l["resets_at"]),
+                         ("seven_day", 10080, 0.28, (NOW + timedelta(days=5)).isoformat()))
+
+    def test_the_plan_is_the_tier_grok_names(self):
+        def get(url, headers, now):
+            self.calls.append(url)
+            return Answer({"subscription_tier_display": "SuperGrok"} if url == xai.SETTINGS_URL else self.BODY, 200, None)
+        got = xai.read(Credential("u", {"key": "k", "expires": None}), NOW, get)
+        self.assertEqual(got["plan"], "SuperGrok")
+
+    def test_an_expired_grok_token_is_not_sent(self):
+        got = xai.read(Credential("u", {"key": "k", "expires": (NOW - timedelta(minutes=1)).isoformat()}),
+                       NOW, self.up(Answer(self.BODY, 200, None)))
+        self.assertEqual((got["why"], self.calls), ("credential-expired", []))
 
 
 class LastGood(Base):

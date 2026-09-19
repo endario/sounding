@@ -1,4 +1,5 @@
-"""`sounding read [--vendor V]... [--max-age S] --json`"""
+"""`sounding` (a table for people), `sounding read [--vendor V]... [--max-age S] --json`,
+`sounding capture claude-statusline`."""
 
 from __future__ import annotations
 
@@ -13,7 +14,12 @@ from .adapters import REGISTRY
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="sounding")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd")
+    st = sub.add_parser("status", help="usage per account, for people (the default)")
+    for q in (p, st):
+        q.add_argument("--vendor", action="append", choices=sorted(REGISTRY))
+        q.add_argument("--max-age", type=float, default=300.0)
+        q.add_argument("--all", action="store_true", help="every limit the vendor reports")
     r = sub.add_parser("read", help="print readings")
     r.add_argument("--vendor", action="append", choices=sorted(REGISTRY))
     r.add_argument("--max-age", type=float, default=300.0)
@@ -30,9 +36,14 @@ def main(argv: list[str] | None = None) -> int:
             pass
         return 0
     out = []
-    for v in a.vendor or sorted(REGISTRY):
+    for v in getattr(a, "vendor", None) or sorted(REGISTRY):
         out += cache.through(REGISTRY[v], max_age=a.max_age,
                              clock=lambda: datetime.now(timezone.utc), get=transport.get)
+    if a.cmd in (None, "status"):
+        from .show import render
+        sys.stdout.write(render(out, datetime.now(timezone.utc), color=sys.stdout.isatty(),
+                                all_limits=a.all))
+        return 0
     json.dump(out, sys.stdout)
     sys.stdout.write("\n")
     return 0
