@@ -98,6 +98,24 @@ class Discovery(Base):
             creds = anthropic.discover()
         self.assertEqual([(c.account, c.secret["token"]) for c in creds], [(UUID, "new")])
 
+    def test_session_window_usage_reset_and_lock_are_read(self):
+        body = {"five_hour": {"utilization": 43.0, "resets_at": (NOW + timedelta(hours=2)).isoformat(),
+                              "locked_reason": None},
+                "seven_day": {"utilization": 100.0, "resets_at": (NOW + timedelta(hours=9)).isoformat(),
+                              "locked_reason": "weekly_limit"}}
+        got = anthropic.read(Credential(UUID, {"token": "t", "expires": None}), NOW, self.up(Answer(body, 200, None)))
+        by = {l["name"]: l for l in got["limits"]}
+        self.assertEqual((by["five_hour"]["used_at_least"], by["five_hour"]["resets_at"], by["five_hour"]["held"]),
+                         (0.43, (NOW + timedelta(hours=2)).isoformat(), False))
+        self.assertEqual((by["seven_day"]["held"], by["seven_day"]["held_why"]), (True, "weekly_limit"))
+
+    def test_an_unstarted_session_window_is_zero_not_unknown(self):
+        body = {"five_hour": {"utilization": 0.0, "resets_at": None}}
+        got = anthropic.read(Credential(UUID, {"token": "t", "expires": None}), NOW, self.up(Answer(body, 200, None)))
+        from sounding.schema import settled
+        l = settled(got, NOW + timedelta(days=1))["limits"][0]
+        self.assertEqual((l["used_at_least"], l["resets_at"]), (0.0, None))
+
     def test_an_expired_token_is_not_sent(self):
         got = anthropic.read(Credential(UUID, {"token": "t", "expires": 1}), NOW,
                              self.up(Answer({}, 200, None)))

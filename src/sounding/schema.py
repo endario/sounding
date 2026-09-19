@@ -40,11 +40,12 @@ def reading(vendor: str, account: str | None, taken_at: datetime, status: str, *
 
 def settled(r: dict, now: datetime) -> dict:
     """The reading as of `now`: a window whose reset has passed no longer has a used figure,
-    whatever it had when taken."""
+    whatever it had when taken. A window with no reset at all is one the vendor has not opened;
+    its figure (zero) stands until the next reading."""
     out = dict(r, limits=[dict(l) for l in r.get("limits", [])])
     for l in out["limits"]:
         resets = moment(l.get("resets_at"))
-        if resets is None or resets <= now:
+        if resets is not None and resets <= now:
             l["used_at_least"] = None
     return out
 

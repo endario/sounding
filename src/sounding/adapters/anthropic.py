@@ -106,10 +106,15 @@ def _limits(body: dict, now: datetime) -> list[dict]:
             continue
         resets = _iso(w.get("resets_at"))
         u = w.get("utilization")
+        num = isinstance(u, (int, float)) and not isinstance(u, bool)
+        # No reset and nothing used is a window that has not started: the vendor's own zero.
+        unopened = resets is None and num and u == 0
+        locked = w.get("locked_reason")
         out.append(limit(name, window_minutes=WINDOWS.get(name),
-                         used_at_least=u / 100 if isinstance(u, (int, float)) and not isinstance(u, bool)
+                         used_at_least=0.0 if unopened else u / 100 if num
                          and resets is not None and resets > now else None,
-                         resets_at=resets, held=None))
+                         resets_at=resets, held=locked is not None,
+                         held_why=str(locked) if locked is not None else None))
     return out
 
 
