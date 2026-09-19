@@ -41,6 +41,7 @@ class Upstream:
     def __init__(self, delay: float = 0.0):
         self.calls: list[str] = []
         self.refuse: int | None = None
+        self.retry_after: timedelta | None = timedelta(seconds=120)
         self.delay = delay
         self._lock = threading.Lock()
 
@@ -49,7 +50,8 @@ class Upstream:
             self.calls.append(url)
         time.sleep(self.delay)
         if self.refuse:
-            return Answer(None, self.refuse, f"http-{self.refuse}", now + timedelta(seconds=120))
+            return Answer(None, self.refuse, f"http-{self.refuse}",
+                          now + self.retry_after if self.retry_after else None)
         return Answer(WHAM if url == openai.URL else QUOTA, 200, None)
 
 
@@ -138,11 +140,44 @@ class Contract(unittest.TestCase):
                 self.now = NOW + timedelta(seconds=60)
                 self.read(vendor, max_age=0)  # a caller demanding fresh data still waits
                 self.assertEqual(len(self.up.calls), 1)
-                self.now = NOW + timedelta(seconds=121)
+                self.now = NOW + cache.MIN_BACKOFF + timedelta(seconds=1)
                 self.up.refuse = None
                 self.assertEqual(self.read(vendor, max_age=0)[0]["status"], "ok")
                 self.assertEqual(len(self.up.calls), 2)
                 self.now, self.up.refuse = NOW, 429
+
+    def test_a_429_keeps_the_last_good_reading_and_holds_off_even_without_retry_after(self):
+        good = self.read(zai)[0]
+        self.up.refuse = 429
+        self.up.retry_after = None
+        self.now = NOW + timedelta(minutes=10)
+        got = self.read(zai)[0]
+        self.assertEqual((got["status"], got["taken_at"]), ("ok", good["taken_at"]))
+        self.assertEqual(got["retry_until"], (self.now + cache.MIN_BACKOFF).isoformat())
+        self.now += timedelta(minutes=1)
+        self.read(zai, max_age=0)
+        self.assertEqual(len(self.up.calls), 2, "the deadline binds even a caller asking for fresh data")
+
+    def test_a_newer_local_reading_keeps_the_throttle_deadline(self):
+        from types import SimpleNamespace
+        from sounding.schema import reading
+        fresh = [reading("zai", None, NOW, "ok")]
+        adapter = SimpleNamespace(VENDOR="zai", discover=zai.discover, read=lambda c, n, g: zai.read(c, n, self.up),
+                                  local=lambda now: [dict(r, account=zai.discover()[0].account) for r in fresh])
+        self.up.refuse = 429
+        self.now = NOW + timedelta(minutes=1)
+        fresh[0] = reading("zai", None, self.now - timedelta(minutes=30), "ok")
+        self.read(adapter, max_age=0)
+        fresh[0] = reading("zai", None, self.now + timedelta(minutes=1), "ok")
+        self.now += timedelta(minutes=2)
+        self.read(adapter)
+        self.read(adapter, max_age=0)
+        self.assertEqual(len(self.up.calls), 1, "a capture landing mid-backoff must not erase the deadline")
+
+    def test_a_server_fault_keeps_the_last_good_reading_too(self):
+        good = self.read(zai)[0]
+        self.up.refuse, self.now = 503, NOW + timedelta(minutes=10)
+        self.assertEqual(self.read(zai)[0]["taken_at"], good["taken_at"])
 
     def test_a_refused_account_keeps_its_deadline_while_a_stale_sibling_is_re_asked(self):
         from types import SimpleNamespace

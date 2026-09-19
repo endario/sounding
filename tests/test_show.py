@@ -31,6 +31,11 @@ class Render(unittest.TestCase):
         r = reading("zai", "z", NOW, "refused", why="http-429", retry_until=NOW + timedelta(minutes=5))
         self.assertIn("not read: http-429, retry in 5m", show.render([r], NOW))
 
+    def test_a_throttled_account_shows_its_kept_reading_and_when_it_is_next_read(self):
+        r = reading("zai", "z", NOW - timedelta(minutes=10), "ok", limits=[])
+        r["retry_until"] = (NOW + timedelta(minutes=4)).isoformat()
+        self.assertIn("throttled: next read in 4m", show.render([r], NOW))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -75,6 +75,9 @@ def render(readings: list[dict], now: datetime, *, color: bool = False, all_limi
         age = ("just read" if not taken or (now - taken).total_seconds() < 60
                else f"read {_until(now, taken)} ago")
         src = f", {r['source']}" if r.get("source") not in (None, "api") else ""
+        wait = moment(r.get("retry_until"))
+        if r.get("status") == "ok" and wait and wait > now:
+            src += f", throttled: next read in {_until(wait, now)}"
         plan = _plan(r)
         lines.append(f"{vendor}" + (f" {plan}" if plan else "") + f" · {who}" + (f"  ({age}{src})" if age else ""))
         if r.get("status") != "ok":

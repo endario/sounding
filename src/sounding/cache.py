@@ -7,11 +7,11 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import projection
-from .schema import moment, settled
+from .schema import iso, moment, settled
 
 
 def default_dir() -> Path:
@@ -45,7 +45,15 @@ def _newer(a: dict | None, b: dict | None) -> dict | None:
 
 # A failure that says nothing about the account: the last good reading stays, keeping its own
 # `taken_at` so a consumer can see how old it is. An auth refusal is news and replaces it.
+# A throttle or a server fault is the same kind of failure; it also holds off every caller, for at
+# least MIN_BACKOFF, since Anthropic's usage endpoint answers 429 with `Retry-After: 0`.
 TRANSIENT = frozenset({"unreachable", "not-json", "not-an-object"})
+MIN_BACKOFF = timedelta(minutes=5)
+
+
+def _throttled(r: dict) -> bool:
+    why = r.get("why") or ""
+    return why == "http-429" or why.startswith("http-5")
 
 
 def through(adapter, *, max_age: float, clock, get, directory: Path | None = None) -> list[dict]:
@@ -73,18 +81,28 @@ def through(adapter, *, max_age: float, clock, get, directory: Path | None = Non
             best = _newer(prior if prior and prior.get("status") == "ok" else None,
                           local.get(cred.account))
             age = _age(best, now) if best else None
+            # A refusal's deadline binds every caller, whatever --max-age it asked for, and stays
+            # with whichever reading is kept.
+            if best is not None and prior is not None and _backing_off(prior, now):
+                best = dict(best, retry_until=prior["retry_until"])
             if best is not None and age is not None and 0 <= age < max_age:
                 # A local source names no plan; the account's plan does not change with its source.
                 if best.get("plan") is None and prior is not None and prior.get("plan") is not None:
                     best = dict(best, plan=prior["plan"])
                 out.append(best)
             elif prior is not None and _backing_off(prior, now):
-                # A refusal's deadline binds every caller, whatever --max-age it asked for.
                 out.append(best or prior)
             else:
                 got = adapter.read(cred, now, get)
-                keep = got["status"] != "ok" and got.get("why") in TRANSIENT and best is not None
-                out.append(best if keep else got)
+                if got["status"] != "ok" and _throttled(got):
+                    until = moment(got.get("retry_until"))
+                    got = dict(got, retry_until=iso(max(until or now, now + MIN_BACKOFF)))
+                if got["status"] != "ok" and best is not None and got.get("why") in TRANSIENT:
+                    got = best
+                elif got["status"] != "ok" and best is not None and _throttled(got):
+                    # The last good reading stands, carrying the deadline before anyone asks again.
+                    got = dict(best, retry_until=got["retry_until"])
+                out.append(got)
         history = projection.prune(projection.record(history, out), now)
         _write(path, out, history)
         return [projection.attach(settled(r, now), history) for r in out]
