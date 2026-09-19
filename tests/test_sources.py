@@ -122,6 +122,9 @@ class Discovery(Base):
                          {"limits:session": (300, "warning", True),
                           "limits:weekly_scoped:Fable": (10080, "normal", False)})
         self.assertIsNone(by["limits:session"]["held"], "severity is the vendor's word; no threshold here")
+        bare = anthropic.read(Credential(UUID, {"token": "t", "expires": None}), NOW, self.up(Answer(
+            {"limits": [{"kind": "weekly_all", "percent": 88, "severity": "warning", "is_active": True}]}, 200, None)))
+        self.assertAlmostEqual(bare["limits"][0]["used_at_least"], 0.88, msg="no reset is not a passed reset")
 
     def test_an_unstarted_session_window_is_zero_not_unknown(self):
         body = {"five_hour": {"utilization": 0.0, "resets_at": None}}

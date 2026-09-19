@@ -117,8 +117,9 @@ def _severity_limits(body: dict, now: datetime) -> list[dict]:
         pct = l.get("percent")
         sev = l.get("severity")
         out.append(limit(name, window_minutes=GROUP_MINUTES.get(l.get("group")),
+                         # A severity entry need not carry a reset; only a passed one voids its figure.
                          used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
-                         and resets is not None and resets > now else None,
+                         and (resets is None or resets > now) else None,
                          resets_at=resets, held=None, severity=sev if isinstance(sev, str) else None,
                          active=l.get("is_active") if isinstance(l.get("is_active"), bool) else None,
                          kind=l.get("kind") if isinstance(l.get("kind"), str) else None))
