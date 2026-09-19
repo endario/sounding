@@ -109,6 +109,20 @@ class Discovery(Base):
                          (0.43, (NOW + timedelta(hours=2)).isoformat(), False))
         self.assertEqual((by["seven_day"]["held"], by["seven_day"]["held_why"]), (True, "weekly_limit"))
 
+    def test_the_accounts_own_severity_is_kept_verbatim(self):
+        body = {"limits": [
+            {"kind": "session", "group": "session", "percent": 44, "severity": "warning",
+             "resets_at": (NOW + timedelta(hours=2)).isoformat(), "scope": None, "is_active": True},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": 0, "severity": "normal",
+             "resets_at": (NOW + timedelta(days=2)).isoformat(),
+             "scope": {"model": {"id": None, "display_name": "Fable"}}, "is_active": False}]}
+        got = anthropic.read(Credential(UUID, {"token": "t", "expires": None}), NOW, self.up(Answer(body, 200, None)))
+        by = {l["name"]: l for l in got["limits"]}
+        self.assertEqual({k: (v["window_minutes"], v["severity"], v["active"]) for k, v in by.items()},
+                         {"limits:session": (300, "warning", True),
+                          "limits:weekly_scoped:Fable": (10080, "normal", False)})
+        self.assertIsNone(by["limits:session"]["held"], "severity is the vendor's word; no threshold here")
+
     def test_an_unstarted_session_window_is_zero_not_unknown(self):
         body = {"five_hour": {"utilization": 0.0, "resets_at": None}}
         got = anthropic.read(Credential(UUID, {"token": "t", "expires": None}), NOW, self.up(Answer(body, 200, None)))

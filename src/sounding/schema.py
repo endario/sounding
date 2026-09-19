@@ -24,11 +24,16 @@ def moment(value: object) -> datetime | None:
 
 
 def limit(name: str, *, window_minutes: int | None, used_at_least: float | None,
-          resets_at: datetime | None, held: bool | None, held_why: str | None = None) -> dict:
+          resets_at: datetime | None, held: bool | None, held_why: str | None = None,
+          severity: str | None = None, active: bool | None = None) -> dict:
     if used_at_least is not None and not (math.isfinite(used_at_least) and 0 <= used_at_least):
         used_at_least = None
     return {"name": name, "window_minutes": window_minutes, "used_at_least": used_at_least,
-            "resets_at": iso(resets_at), "held": held, "held_why": held_why}
+            "resets_at": iso(resets_at), "held": held, "held_why": held_why,
+            # The vendor's own word for how close the limit is, verbatim (Anthropic only).
+            "severity": severity,
+            # Whether the vendor says it is applying this limit now (Anthropic only).
+            "active": active}
 
 
 def reading(vendor: str, account: str | None, taken_at: datetime, status: str, *,

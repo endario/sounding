@@ -99,6 +99,31 @@ def discover() -> list[Credential]:
             for who, rec in sorted(best.items())]
 
 
+# Anthropic's `limits` list names each limit by kind and group, not by window.
+GROUP_MINUTES = {"session": 300, "weekly": 10080}
+
+
+def _severity_limits(body: dict, now: datetime) -> list[dict]:
+    """Anthropic's second vocabulary: the account's own severity for each limit it applies,
+    and whether it is applying it now. Kept verbatim; no threshold is drawn on it here."""
+    out = []
+    for l in body.get("limits") if isinstance(body.get("limits"), list) else []:
+        if not isinstance(l, dict):
+            continue
+        scope = l.get("scope") if isinstance(l.get("scope"), dict) else {}
+        model = (scope.get("model") or {}).get("display_name") if isinstance(scope.get("model"), dict) else None
+        name = f"limits:{l.get('kind')}" + (f":{model}" if model else "")
+        resets = _iso(l.get("resets_at"))
+        pct = l.get("percent")
+        sev = l.get("severity")
+        out.append(limit(name, window_minutes=GROUP_MINUTES.get(l.get("group")),
+                         used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
+                         and resets is not None and resets > now else None,
+                         resets_at=resets, held=None, severity=sev if isinstance(sev, str) else None,
+                         active=l.get("is_active") if isinstance(l.get("is_active"), bool) else None))
+    return out
+
+
 def _limits(body: dict, now: datetime) -> list[dict]:
     out = []
     for name, w in body.items():
@@ -139,7 +164,8 @@ def read(cred: Credential, now: datetime, get) -> dict:
     ans = get(URL, {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"}, now)
     if ans.body is None:
         return failed(VENDOR, cred.account, now, ans)
-    return reading(VENDOR, cred.account, now, OK, limits=_limits(ans.body, now))
+    return reading(VENDOR, cred.account, now, OK,
+                   limits=_limits(ans.body, now) + _severity_limits(ans.body, now))
 
 
 # ---- local: statusline captures ----------------------------------------------------------
