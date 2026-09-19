@@ -104,6 +104,20 @@ class Contract(unittest.TestCase):
         self.read(openai)
         self.assertEqual(len(self.up.calls), 2, "stale reading must be re-asked")
 
+    def test_a_reading_dated_after_the_clock_is_not_fresh(self):
+        self.now = NOW + timedelta(minutes=10)
+        self.read(openai)
+        self.now = NOW  # the clock stepped back: that reading claims to come from the future
+        self.read(openai)
+        self.assertEqual(len(self.up.calls), 2)
+
+    def test_a_different_sign_in_is_read_afresh_and_the_old_account_is_not_served(self):
+        self.read(openai)
+        (self.tmp / "codex" / "auth.json").write_text(json.dumps(
+            {"tokens": {"access_token": OPENAI_SECRET, "account_id": "acct-other"}}))
+        got = self.read(openai)
+        self.assertEqual(([r["account"] for r in got], len(self.up.calls)), (["acct-other"], 2))
+
     def test_a_window_past_its_reset_has_no_used_figure_even_from_cache(self):
         self.read(zai)
         self.now = NOW + timedelta(hours=4)  # five-hour window has reset; weekly has not
