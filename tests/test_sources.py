@@ -86,12 +86,10 @@ class Statusline(Base):
 
 
 class Discovery(Base):
-    def test_one_credential_per_account_preferring_an_unexpired_token_and_skipping_wrapped_dirs(self):
+    def test_one_credential_per_account_preferring_an_unexpired_token_and_skipping_unsigned_dirs(self):
         self.signed_in(".claude-a")
         self.signed_in(".claude-b")
-        glm = self.signed_in(".claude-glm", uuid="copied-from-another-account")
-        (self.home / ".config").mkdir()
-        (self.home / ".config" / "claude-glm.env").write_text(f"CLAUDE_CONFIG_DIR={glm}\n")
+        (self.home / ".claude-glm").mkdir()  # a wrapper dir: copied token, no oauthAccount
         live = int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp() * 1000)
         recs = {".claude-a": [{"accessToken": "old", "expiresAt": 1}],
                 ".claude-b": [{"accessToken": "new", "expiresAt": live}],

@@ -30,21 +30,6 @@ def _default_dir() -> Path:
     return Path.home() / ".claude"
 
 
-def _wrapped_dirs() -> set[Path]:
-    """Config directories that wrappers (claude-glm, claude-kimi, …) point at another vendor.
-    Their keychain slot can hold a copy of an Anthropic credential, which would be read twice."""
-    out = set()
-    for env in (Path.home() / ".config").glob("claude-*.env"):
-        try:
-            for line in env.read_text().splitlines():
-                k, _, v = line.partition("=")
-                if k.strip().removeprefix("export ").strip() == "CLAUDE_CONFIG_DIR":
-                    out.add(Path(os.path.expandvars(os.path.expanduser(v.strip().strip("'\"")))).resolve())
-        except OSError:
-            continue
-    return out
-
-
 def _identity(config_dir: Path) -> str | None:
     for f in (config_dir / ".claude.json",) + ((Path.home() / ".claude.json",)
                                                if config_dir.resolve() == _default_dir().resolve() else ()):
@@ -59,10 +44,10 @@ def _identity(config_dir: Path) -> str | None:
 
 
 def config_dirs() -> list[Path]:
-    skip = _wrapped_dirs()
-    home = Path.home()
-    return sorted(p for p in home.glob(".claude*") if p.is_dir() and p.resolve() not in skip
-                  and ((p / ".claude.json").is_file() or p.resolve() == _default_dir().resolve()))
+    """Every `~/.claude*` directory. Only those signed in to a claude.ai account yield a
+    credential: wrapper directories for other vendors (claude-glm, claude-kimi) carry no
+    `oauthAccount`, even when their keychain slot holds a copied token."""
+    return sorted(p for p in Path.home().glob(".claude*") if p.is_dir())
 
 
 def _services(config_dir: Path) -> list[str]:
