@@ -160,7 +160,6 @@ def _credits(body: dict, now: datetime) -> dict | None:
 def _limits(body: dict, now: datetime) -> list[dict]:
     out = []
     for name, w in body.items():
-        # `extra_usage` is spend, not a window: it is read as `credits`.
         if name == "extra_usage" or not isinstance(w, dict) or "utilization" not in w:
             continue
         resets = _iso(w.get("resets_at"))
