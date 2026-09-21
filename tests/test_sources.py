@@ -28,7 +28,8 @@ class Base(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.home = self.tmp / "home"
         self.home.mkdir()
-        p = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.tmp / "cache"), "HOME": str(self.home)})
+        p = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.tmp / "cache"), "HOME": str(self.home),
+                                          "CLAUDE_GLM_ENV": "", "GLM_API_KEY": ""})
         p.start()
         self.addCleanup(p.stop)
         self.calls = []

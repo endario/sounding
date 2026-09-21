@@ -72,7 +72,7 @@ def limits(body: dict, now: datetime) -> list[dict]:
         resets = _millis(l.get("nextResetTime"))
         total, spent, pct = l.get("usage"), l.get("currentValue"), l.get("percentage")
         kind = l.get("type") if isinstance(l.get("type"), str) else None
-        if resets is None and kind == "TOKENS_LIMIT" and pct == 0:
+        if resets is None and kind == "TOKENS_LIMIT" and _num(pct) and pct == 0:
             # A token window nothing has opened yet is answered with no reset time.
             used = 0.0
         elif resets is None or resets <= now:
