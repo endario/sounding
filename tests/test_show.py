@@ -36,6 +36,14 @@ class Render(unittest.TestCase):
         out = show.render(readings, NOW)
         self.assertLess(out.index("Codex"), out.index("Kimi Code"))
 
+    def test_the_bare_claude_directory_is_labeled_account1_not_default(self):
+        home = Path(tempfile.mkdtemp())
+        (home / ".claude").mkdir()
+        (home / ".claude" / ".claude.json").write_text('{"oauthAccount": {"accountUuid": "u"}}')
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            labels = show._claude_dirs()
+        self.assertEqual(labels, {"u": "account1"})
+
     def test_a_zai_account_is_named_by_the_wrapper_holding_its_key(self):
         home = Path(tempfile.mkdtemp())
         (home / ".config").mkdir()

@@ -370,14 +370,26 @@ class Kimi(Base):
         self.assertEqual([(l["name"], l["window_minutes"], l["used_at_least"]) for l in got],
                          [("seven_day", 10080, 0.4)])
 
-    def test_the_per_model_shape_is_only_read_when_no_windowed_limits_are_given(self):
-        data = {"data": [{"model_name": "all", "limit": 1000, "used": 500},
-                         {"model_name": "k3", "limit": 100, "used": 25}]}
-        got = {l["name"]: l["used_at_least"] for l in kimi.limits(data, NOW)}
-        self.assertEqual(got, {"all": 0.5, "k3": 0.25})
-        with_windows = dict(data, limits=[{"window": {"duration": 5, "timeUnit": "HOUR"},
-                                           "detail": {"limit": 100, "used": 10}}])
-        self.assertEqual([l["name"] for l in kimi.limits(with_windows, NOW)], ["five_hour"])
+    def test_a_seven_day_entry_in_limits_is_not_duplicated_by_the_usage_aggregate(self):
+        # Both name the same window: `limits[]`'s own entry must win, and `usage` must not also
+        # append a second "seven_day" row.
+        body = {"limits": [{"window": {"duration": 7, "timeUnit": "DAY"}, "detail": {"limit": 1000, "used": 90}}],
+                "usage": {"limit": 1000, "used": 400}}
+        got = [l for l in kimi.limits(body, NOW) if l["name"] == "seven_day"]
+        self.assertEqual([l["used_at_least"] for l in got], [0.09])
+
+    def test_an_unrecognised_unit_string_does_not_substring_match_a_known_one(self):
+        # "HOUR" must not match inside an unrelated word that happens to contain it.
+        minutes = kimi._window_minutes({"duration": 5, "timeUnit": "SOMEHOURISH"})
+        self.assertIsNone(minutes)
+
+    def test_a_non_finite_value_is_read_as_unknown_not_a_crash(self):
+        for bad in ("Infinity", "-Infinity", "NaN"):
+            self.assertIsNone(kimi._float(bad), bad)
+        # A non-finite duration must not reach `int(duration * per_minute)` and raise.
+        got = kimi.limits({"limits": [{"window": {"duration": "Infinity", "timeUnit": "HOUR"},
+                                       "detail": {"limit": 100, "used": 10}}]}, NOW)
+        self.assertEqual([l["window_minutes"] for l in got], [None])
 
     def test_a_remaining_figure_without_used_is_read_as_used(self):
         got = kimi.limits({"usage": {"limit": 100, "remaining": 70}}, NOW)

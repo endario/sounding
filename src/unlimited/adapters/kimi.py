@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,12 +15,13 @@ VENDOR = "kimi"
 BASE_URL = "https://api.kimi.com/coding/v1"
 URL = f"{BASE_URL}/usages"
 FALLBACK_URL = f"{BASE_URL}/usage"
-# Minutes per Kimi window unit; a duration in an unrecognised unit keeps no length.
-UNIT_MINUTES = {"MINUTE": 1, "HOUR": 60, "DAY": 1440, "MONTH": 43200}
-NAMES = {300: "five_hour", 10080: "seven_day", 43200: "month"}
-# `usages.limit_5h/limit_7d.used_ratio`: a fallback only. Confirmed against the real endpoint
-# (and MoonshotAI/kimi-code#3951) to sit stuck at 0 while the account's real `usage`/`limits`
-# counts, in the same response, show real activity — so it is read only when those are absent.
+# Minutes per Kimi window unit, keyed by the confirmed real string with its "TIME_UNIT_" prefix
+# stripped. Only 5-hour and 7-day windows are confirmed on the Kimi Code coding plan.
+UNIT_MINUTES = {"MINUTE": 1, "HOUR": 60, "DAY": 1440}
+NAMES = {300: "five_hour", 10080: "seven_day"}
+# `usages.limit_5h/limit_7d.used_ratio`: read only for a window `usage`/`limits` didn't already
+# cover. Confirmed against the real endpoint (and MoonshotAI/kimi-code#3951) to sit stuck at 0
+# while the account's real `usage`/`limits` counts, in the same response, show real activity.
 RATIO_WINDOWS = {"limit_5h": 300, "limit_7d": 10080}
 
 
@@ -37,7 +39,7 @@ def key_in(path: Path) -> str | None:
             k, _, v = line.partition("=")
             if k.strip().removeprefix("export ").strip() == "KIMI_API_KEY":
                 return v.strip().strip("'\"") or None
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         pass
     return None
 
@@ -60,39 +62,42 @@ def _num(x: object) -> bool:
 def _float(x: object) -> float | None:
     # `/usages`' `limit`/`used`/`remaining` come back as strings; its `used_ratio` does not.
     if _num(x):
-        return float(x)
-    if isinstance(x, str):
+        v = float(x)
+    elif isinstance(x, str):
         try:
-            return float(x)
+            v = float(x)
         except ValueError:
             return None
+    else:
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _pick(d: dict, *keys: str) -> object:
+    """The first of `keys` present with a non-null value — never a truthiness check, so a real
+    `0` or `""` is read rather than treated as absent."""
+    for k in keys:
+        v = d.get(k)
+        if v is not None:
+            return v
     return None
 
 
 def _reset_at(d: dict, now: datetime) -> datetime | None:
-    v = d.get("resetTime") or d.get("reset_at") or d.get("reset_time")
+    v = _pick(d, "resetTime", "reset_at", "reset_time")
     if isinstance(v, str):
         try:
             t = datetime.fromisoformat(v.replace("Z", "+00:00"))
         except ValueError:
             return None
         return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
-    if _num(v):
-        try:
-            return datetime.fromtimestamp(v, tz=timezone.utc)
-        except (OSError, OverflowError, ValueError):
-            return None
     reset_in = _float(d.get("reset_in"))
     return now + timedelta(seconds=reset_in) if reset_in is not None else None
 
 
 def _used_ratio(d: dict) -> float | None:
     lim = _float(d.get("limit"))
-    if lim is None:
-        lim = _float(d.get("limit_amount"))
     used = _float(d.get("used"))
-    if used is None:
-        used = _float(d.get("used_amount"))
     if used is None:
         remaining = _float(d.get("remaining"))
         used = lim - remaining if remaining is not None and lim is not None else None
@@ -101,28 +106,18 @@ def _used_ratio(d: dict) -> float | None:
 
 def _window_minutes(window: dict) -> int | None:
     duration = _float(window.get("duration"))
-    unit = str(window.get("timeUnit") or window.get("time_unit") or "").upper()
-    per_minute = next((v for u, v in UNIT_MINUTES.items() if u in unit), None)
+    unit = str(_pick(window, "timeUnit", "time_unit") or "").upper().removeprefix("TIME_UNIT_")
+    per_minute = UNIT_MINUTES.get(unit)
     return int(duration * per_minute) if duration is not None and per_minute is not None else None
 
 
-def _ratio_limits(usages: dict, now: datetime) -> list[dict]:
-    out = []
-    for key, minutes in RATIO_WINDOWS.items():
-        w = usages.get(key)
-        if not isinstance(w, dict):
-            continue
-        ratio, resets = _float(w.get("used_ratio")), _reset_at(w, now)
-        if ratio is None and resets is None:
-            continue
-        out.append(limit(NAMES[minutes], window_minutes=minutes, used_at_least=ratio, resets_at=resets, held=None))
-    return out
-
-
-def limits(body: dict, now: datetime) -> list[dict]:
-    out = []
+def _windowed(body: dict, now: datetime) -> dict[str, dict]:
+    """The confirmed real shape: `limits[]`'s own windows, plus the top-level `usage` aggregate
+    (the vendor's own Kimi Code CLI labels it "Weekly Usage"; its reset time matches
+    `usages.limit_7d`'s) — merged by resolved window name so the same window never appears twice."""
+    out: dict[str, dict] = {}
     raw_limits = body.get("limits")
-    for i, item in enumerate(raw_limits if isinstance(raw_limits, list) else []):
+    for item in raw_limits if isinstance(raw_limits, list) else []:
         if not isinstance(item, dict):
             continue
         detail = item.get("detail") if isinstance(item.get("detail"), dict) else item
@@ -131,35 +126,43 @@ def limits(body: dict, now: datetime) -> list[dict]:
         used, resets = _used_ratio(detail), _reset_at(detail, now)
         if used is None and resets is None:
             continue
-        out.append(limit(NAMES.get(minutes, f"window_{i}"), window_minutes=minutes,
-                         used_at_least=used, resets_at=resets, held=None))
+        if minutes is None:
+            name = f"window_{len(out)}"
+        else:
+            name = NAMES.get(minutes, f"window_{minutes}m")
+        out[name] = limit(name, window_minutes=minutes, used_at_least=used, resets_at=resets, held=None)
     usage = body.get("usage")
-    if isinstance(usage, dict):
+    if isinstance(usage, dict) and "seven_day" not in out:
         used, resets = _used_ratio(usage), _reset_at(usage, now)
         if used is not None or resets is not None:
-            # The vendor's own Kimi Code CLI labels this top-level aggregate "Weekly Usage";
-            # its reset time matches `usages.limit_7d`'s.
-            out.append(limit("seven_day", window_minutes=10080, used_at_least=used, resets_at=resets, held=None))
-    if out:
-        return out
+            out["seven_day"] = limit("seven_day", window_minutes=10080, used_at_least=used,
+                                     resets_at=resets, held=None)
+    return out
+
+
+def _ratio_limits(usages: dict, now: datetime) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for key, minutes in RATIO_WINDOWS.items():
+        w = usages.get(key)
+        if not isinstance(w, dict):
+            continue
+        ratio, resets = _float(w.get("used_ratio")), _reset_at(w, now)
+        if ratio is None and resets is None:
+            continue
+        name = NAMES[minutes]
+        out[name] = limit(name, window_minutes=minutes, used_at_least=ratio, resets_at=resets, held=None)
+    return out
+
+
+def limits(body: dict, now: datetime) -> list[dict]:
+    found = _windowed(body, now)
     usages = body.get("usages")
     if isinstance(usages, dict):
-        # Last resort: `used_ratio` here is not to be trusted over real counts (see `_ratio_limits`
-        # docstring) but is better than nothing when the account's plan omits `usage`/`limits`.
-        found = _ratio_limits(usages, now)
-        if found:
-            return found
-    data = body.get("data")
-    for item in data if isinstance(data, list) else []:
-        if not isinstance(item, dict):
-            continue
-        used, resets = _used_ratio(item), _reset_at(item, now)
-        if used is None and resets is None:
-            continue
-        # The per-model breakdown shape: no window is named, so none is guessed.
-        name = "all" if item.get("model_name") == "all" else str(item.get("model_name") or "model")
-        out.append(limit(name, window_minutes=None, used_at_least=used, resets_at=resets, held=None))
-    return out
+        # Fills only the windows `limits`/`usage` didn't cover; never overrides a real count with
+        # the distrusted ratio (see `RATIO_WINDOWS`).
+        for name, l in _ratio_limits(usages, now).items():
+            found.setdefault(name, l)
+    return list(found.values())
 
 
 def read(cred: Credential, now: datetime, get) -> dict:
