@@ -108,7 +108,10 @@ def _window_minutes(window: dict) -> int | None:
     duration = _float(window.get("duration"))
     unit = str(_pick(window, "timeUnit", "time_unit") or "").upper().removeprefix("TIME_UNIT_")
     per_minute = UNIT_MINUTES.get(unit)
-    return int(duration * per_minute) if duration is not None and per_minute is not None else None
+    if duration is None or per_minute is None:
+        return None
+    product = duration * per_minute
+    return int(product) if math.isfinite(product) else None
 
 
 def _windowed(body: dict, now: datetime) -> dict[str, dict]:

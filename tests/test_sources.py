@@ -386,10 +386,13 @@ class Kimi(Base):
     def test_a_non_finite_value_is_read_as_unknown_not_a_crash(self):
         for bad in ("Infinity", "-Infinity", "NaN"):
             self.assertIsNone(kimi._float(bad), bad)
-        # A non-finite duration must not reach `int(duration * per_minute)` and raise.
         got = kimi.limits({"limits": [{"window": {"duration": "Infinity", "timeUnit": "HOUR"},
                                        "detail": {"limit": 100, "used": 10}}]}, NOW)
         self.assertEqual([l["window_minutes"] for l in got], [None])
+
+    def test_a_duration_whose_product_overflows_is_read_as_unknown_not_a_crash(self):
+        # "1e308" is itself finite; only `duration * per_minute` (1440 for DAY) overflows.
+        self.assertIsNone(kimi._window_minutes({"duration": "1e308", "timeUnit": "DAY"}))
 
     def test_a_remaining_figure_without_used_is_read_as_used(self):
         got = kimi.limits({"usage": {"limit": 100, "remaining": 70}}, NOW)
