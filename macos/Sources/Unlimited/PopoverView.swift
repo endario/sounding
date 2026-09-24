@@ -105,6 +105,7 @@ struct CardView: View {
                         .foregroundStyle(card.health.color)
                 }
                 bar
+                if card.resets != nil || card.odds != nil || card.runsOut != nil {
                 HStack(alignment: .firstTextBaseline) {
                     if let resets = card.resets { Text(resets).foregroundStyle(.secondary) }
                     Spacer()
@@ -116,6 +117,7 @@ struct CardView: View {
                     .foregroundStyle(tint)
                 }
                 .font(.caption).monospacedDigit()
+                }
             }
         }
     }
