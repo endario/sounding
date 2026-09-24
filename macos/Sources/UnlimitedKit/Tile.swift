@@ -70,8 +70,9 @@ public struct Tile: Identifiable, Equatable, Sendable {
 
     /// The tile under `x`, measured from the strip's leading edge.
     public static func at(_ x: Double, in tiles: [Tile], width: Double, spacing: Double, padding: Double) -> Tile? {
+        guard !tiles.isEmpty else { return nil }
         let i = Int(((x - padding) / (width + spacing)).rounded(.down))
-        return tiles.indices.contains(i) ? tiles[i] : tiles.first
+        return tiles[min(max(i, 0), tiles.count - 1)]
     }
 
     /// The vendor a tile's account belongs to.

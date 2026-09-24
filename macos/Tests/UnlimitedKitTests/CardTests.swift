@@ -55,6 +55,7 @@ func claude() throws -> Reading {
     #expect(at(4 + 29 + 1) == "CL2")
     #expect(at(4 + 29 * 6 + 25) == "OPC2")
     #expect(at(0) == "CL1", "the padding before the first tile")
+    #expect(at(4 + 29 * 7 + 2) == "OPC2", "the padding after the last")
     #expect(tiles.map(\.vendor).first == "anthropic")
     #expect(Tile.vendorName("zai") == "Z.ai" && Tile.vendorName("new") == "new")
 }
