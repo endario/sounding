@@ -263,6 +263,19 @@ class OpenCodeGo(Base):
         self.assertEqual(c.secret["key"], "go-secret")
         self.assertNotIn("go-secret", repr(c) + c.account)
 
+    def test_a_second_isolated_identity_is_a_second_go_account(self):
+        default = self.tmp / "data" / "opencode"
+        default.mkdir(parents=True)
+        (default / "auth.json").write_text(json.dumps({"opencode-go": {"type": "api", "key": "key-one"}}))
+        second = self.home / ".opencode-2" / "opencode"
+        second.mkdir(parents=True)
+        (second / "auth.json").write_text(json.dumps({"opencode-go": {"type": "api", "key": "key-two"}}))
+        with mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(self.tmp / "data")}):
+            os.environ.pop("OPENCODE_API_KEY", None)
+            got = opencode.discover()
+        self.assertEqual(sorted(c.secret["key"] for c in got), ["key-one", "key-two"])
+        self.assertEqual({c.account for c in got}, {opencode.account_of("key-one"), opencode.account_of("key-two")})
+
 
 class Grok(Base):
     BODY = {"config": {"currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY",

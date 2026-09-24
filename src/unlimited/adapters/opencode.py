@@ -21,27 +21,41 @@ URL = "https://opencode.ai/zen/go/v1/usage"
 WINDOWS = {"rolling": ("five_hour", 300), "weekly": ("seven_day", 10080), "monthly": ("month", 43200)}
 
 
-def _auth_file() -> Path:
-    base = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
-    return Path(base) / "opencode" / "auth.json"
+def _auth_file(data_home: Path) -> Path:
+    return data_home / "opencode" / "auth.json"
 
 
-def discover() -> list[Credential]:
-    key = None
+def data_homes() -> list[Path]:
+    """The default XDG_DATA_HOME, plus every isolated one (`~/.opencode-2`, `~/.opencode-3`, ...).
+    auth.json holds one key per provider name, so a second concurrent Go subscription needs its
+    own data directory, the same isolation this machine already uses for a second Claude or GLM
+    account; none may narrow discovery to just the default."""
+    default = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    extra = sorted(p for p in Path.home().glob(".opencode-*") if p.is_dir())
+    return [default] + extra
+
+
+def key_in(data_home: Path) -> str | None:
     try:
-        got = json.loads(_auth_file().read_text())
+        got = json.loads(_auth_file(data_home).read_text())
     except (OSError, ValueError):
-        got = {}
+        return None
     for provider in ("opencode-go", "opencode"):
         entry = got.get(provider) if isinstance(got, dict) else None
         if isinstance(entry, dict) and entry.get("type") == "api" and isinstance(entry.get("key"), str):
-            key = entry["key"]
-            break
-    key = key or os.environ.get("OPENCODE_API_KEY")
-    if not key:
-        return []
+            return entry["key"]
+    return None
+
+
+def account_of(key: str) -> str:
     # The key names no account, so a truncated hash of it stands in.
-    return [Credential(hashlib.sha256(key.encode()).hexdigest()[:16], {"key": key})]
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def discover() -> list[Credential]:
+    keys = [key_in(d) for d in data_homes()] + [os.environ.get("OPENCODE_API_KEY")]
+    found = {account_of(k): k for k in keys if k}
+    return [Credential(a, {"key": k}) for a, k in sorted(found.items())]
 
 
 def _iso(v: object) -> datetime | None:
