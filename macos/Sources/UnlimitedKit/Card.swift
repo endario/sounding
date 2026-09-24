@@ -16,8 +16,9 @@ public struct Card: Identifiable, Sendable {
 
     public static func cards(_ r: Reading, now: Date, timeZone: TimeZone = .current) -> [Card] {
         r.limits
-            .filter { $0.role != nil && ($0.usedAtLeast != nil || $0.held == true) }
-            .sorted { (order.firstIndex(of: $0.role!) ?? 9) < (order.firstIndex(of: $1.role!) ?? 9) }
+            // As `unlimited`'s status view: a window with a figure, or anything the vendor holds.
+            .filter { ($0.role != nil && $0.usedAtLeast != nil) || $0.held == true }
+            .sorted { (order.firstIndex(of: $0.role ?? "") ?? 9) < (order.firstIndex(of: $1.role ?? "") ?? 9) }
             .map { l in
                 let length = Double(l.windowMinutes ?? 0) * 60
                 let left = l.resetsAt.map { $0.timeIntervalSince(now) }

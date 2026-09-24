@@ -68,6 +68,12 @@ public struct Tile: Identifiable, Equatable, Sendable {
     /// The vendor's name for a person; an unknown vendor shows its id.
     public static func vendorName(_ id: String) -> String { vendors.first { $0.id == id }?.name ?? id }
 
+    /// The tile under `x`, measured from the strip's leading edge.
+    public static func at(_ x: Double, in tiles: [Tile], width: Double, spacing: Double, padding: Double) -> Tile? {
+        let i = Int(((x - padding) / (width + spacing)).rounded(.down))
+        return tiles.indices.contains(i) ? tiles[i] : tiles.first
+    }
+
     /// The vendor a tile's account belongs to.
     public var vendor: String { String(id.prefix { $0 != "/" }) }
 

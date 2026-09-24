@@ -8,7 +8,6 @@ final class StripModel: ObservableObject {
     @Published private(set) var readings: [String: Reading] = [:]
     /// The account the popover shows, by tile id.
     @Published var selected: String?
-    @Published private(set) var readAt: Date?
     /// Why the strip is a single `!`, for the menu; nil when it reads.
     @Published private(set) var problem: String?
     /// The strip's phase: each weekly figure for `weeklyShown`, then any alternate window for
@@ -54,7 +53,6 @@ final class StripModel: ObservableObject {
                     self.tiles = Tile.strip(readings, now: Date())
                     self.readings = Dictionary(readings.map { ("\($0.vendor)/\($0.account ?? "")", $0) },
                                                uniquingKeysWith: { a, _ in a })
-                    self.readAt = Date()
                     self.pace()
                 case .failure(let e as Reading.SchemaError):
                     self.fail("unlimited speaks schema \(e.schema); this app reads schema 1")

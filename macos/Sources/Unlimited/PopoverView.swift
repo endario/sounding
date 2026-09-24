@@ -13,9 +13,10 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let why = model.problem {
                 Text(why).font(.callout).foregroundStyle(.secondary)
+                footer(nil)
             } else if let tile, let reading = model.readings[tile.id] {
                 tabs(current: tile.vendor)
-                chips(vendor: tile.vendor)
+                if model.tiles.filter({ $0.vendor == tile.vendor }).count > 1 { chips(vendor: tile.vendor) }
                 ForEach(Card.cards(reading, now: Date())) { CardView(card: $0) }
                 if let credits = Card.credits(reading) {
                     Box { Label(credits, systemImage: "creditcard").font(.callout) }
@@ -23,6 +24,7 @@ struct PopoverView: View {
                 footer(reading)
             } else {
                 Text("Reading…").foregroundStyle(.secondary)
+                footer(nil)
             }
         }
         .padding(12)
@@ -42,9 +44,8 @@ struct PopoverView: View {
     }
 
     private func chips(vendor: String) -> some View {
-        let mine = model.tiles.filter { $0.vendor == vendor }
-        return HStack(spacing: 6) {
-            ForEach(mine) { t in
+        HStack(spacing: 6) {
+            ForEach(model.tiles.filter { $0.vendor == vendor }) { t in
                 Button { model.selected = t.id } label: {
                     HStack(spacing: 4) {
                         Circle().fill(t.health.color).frame(width: 6, height: 6)
@@ -58,16 +59,17 @@ struct PopoverView: View {
                 .opacity(t.dimmed ? 0.5 : 1)
             }
         }
-        .opacity(mine.count > 1 ? 1 : 0)
-        .frame(height: mine.count > 1 ? nil : 0)
     }
 
-    private func footer(_ r: Reading) -> some View {
+    /// Refresh and Quit are always here: the app has no Dock icon or menu to quit from.
+    private func footer(_ r: Reading?) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text([Card.plan(r), r.names.joined(separator: ", ")].compactMap { $0 }.filter { !$0.isEmpty }
-                        .joined(separator: " · "))
-                if let at = r.takenAt { Text("Read \(Card.until(Date(), at)) ago").foregroundStyle(.secondary) }
+            if let r {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text([Card.plan(r), r.names.joined(separator: ", ")].compactMap { $0 }.filter { !$0.isEmpty }
+                            .joined(separator: " · "))
+                    if let at = r.takenAt { Text("Read \(Card.until(Date(), at)) ago").foregroundStyle(.secondary) }
+                }
             }
             Spacer()
             Button { model.refresh(maxAge: 0) } label: { Image(systemName: "arrow.clockwise") }

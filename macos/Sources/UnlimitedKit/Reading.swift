@@ -61,7 +61,6 @@ public struct Credits: Decodable, Sendable {
     public let enabled: Bool
     public let used: Double?
     public let limit: Double?
-    public let balance: Double?
     public let currency: String?
     public let disabledReason: String?
 }

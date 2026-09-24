@@ -47,3 +47,14 @@ func claude() throws -> Reading {
 @Test func thePlanReadsInAPersonsWords() throws {
     #expect(Card.plan(try claude()) == "Max 20x")
 }
+
+@Test func aClickOpensTheAccountUnderThePointer() throws {
+    let tiles = try Tile.strip(fixture(), now: now)  // CL1 CL2 CDX ZAI ZAI2 OPC OPC2
+    let at = { (x: Double) in Tile.at(x, in: tiles, width: 26, spacing: 3, padding: 4)?.label }
+    #expect(at(5) == "CL1")
+    #expect(at(4 + 29 + 1) == "CL2")
+    #expect(at(4 + 29 * 6 + 25) == "OPC2")
+    #expect(at(0) == "CL1", "the padding before the first tile")
+    #expect(tiles.map(\.vendor).first == "anthropic")
+    #expect(Tile.vendorName("zai") == "Z.ai" && Tile.vendorName("new") == "new")
+}
