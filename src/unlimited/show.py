@@ -55,7 +55,7 @@ def _opencode_identities() -> dict[str, str]:
         key = opencode.key_in(d)
         if key:
             # Named as the identity is: the default is bare `opencode`, the Nth `opencode-N`, the way
-            # claude-glm wrappers are, so the names sort as the slots do.
+            # claude-glm wrappers are.
             name = "opencode" if i == 0 else d.name.removeprefix(".")
             out.setdefault(opencode.account_of(key), []).append(name)
     return {k: ", ".join(dict.fromkeys(v)) for k, v in out.items()}
