@@ -25,9 +25,10 @@ struct SettingsView: View {
                             .labelsHidden()
                         TextField("Label", text: Binding(get: { model.prefs.labels[t.id] ?? t.label },
                                                          set: { v in model.arrange { $0.rename(t.id, to: v) } }))
+                            .labelsHidden()
                             .frame(width: 60)
                             .font(.system(.body, design: .monospaced))
-                        Text("\(Tile.vendorName(t.vendor)) · \(model.readings[t.id]?.names.joined(separator: ", ") ?? "")")
+                        Text(([Tile.vendorName(t.vendor)] + (model.readings[t.id]?.names ?? [])).joined(separator: " · "))
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button { move(t, by: -1) } label: { Image(systemName: "chevron.up") }.buttonStyle(.borderless)
@@ -43,7 +44,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 440)
+        // A grouped form scrolls and reports no height of its own; without one the window
+        // opens as a bare title bar.
+        .frame(width: 460, height: 520)
         .onAppear { state.path = model.customPath }
     }
 
