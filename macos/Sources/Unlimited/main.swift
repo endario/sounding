@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .applicationDefined
         popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: PopoverView(model: model))
+        model.closePopover = { [weak self] in self?.popover.performClose(nil) }
         item.button?.target = self
         item.button?.action = #selector(toggle)
         model.start()

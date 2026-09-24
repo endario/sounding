@@ -54,7 +54,7 @@ struct PopoverView: View {
             Spacer()
             Button { model.refresh(maxAge: 0) } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.plain).help("Read now")
-            Button { SettingsWindow.show(model) } label: { Image(systemName: "gearshape") }
+            Button { model.closePopover(); SettingsWindow.show(model) } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.plain).help("Settings")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                 .buttonStyle(.plain).help("Quit")
