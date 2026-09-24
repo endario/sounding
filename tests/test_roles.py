@@ -34,10 +34,10 @@ class Roles(unittest.TestCase):
         got = {l["name"]: l["role"] for l in anthropic.limits(body, NOW)}
         self.assertEqual(got, {"seven_day_opus": "weekly_model", "limits:weekly_scoped:Opus": None})
 
-    def test_a_model_weekly_claude_has_not_reported_before_is_still_a_model_weekly(self):
-        got = anthropic.limits({"seven_day_haiku": {"utilization": 1, "resets_at": iso(days=1)}}, NOW)
+    def test_a_weekly_bucket_that_is_not_a_known_model_is_an_extra_not_a_model_weekly(self):
+        got = anthropic.limits({"seven_day_oauth_apps": {"utilization": 1, "resets_at": iso(days=1)}}, NOW)
         self.assertEqual([(l["role"], l["scope"], l["window_minutes"]) for l in got],
-                         [("weekly_model", "Haiku", 10080)])
+                         [("extra", "oauth_apps", 10080)])
 
     def test_a_statusline_capture_names_its_windows_like_the_api_does(self):
         got = {l["name"]: l["role"] for l in anthropic.statusline_limits(

@@ -26,6 +26,7 @@ URL = "https://api.anthropic.com/api/oauth/usage"
 PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
 WINDOWS = {"five_hour": 300, "seven_day": 10080, "seven_day_opus": 10080, "seven_day_sonnet": 10080}
 KEYCHAIN = "Claude Code-credentials"
+MODELS = {"opus", "sonnet"}
 
 
 def _default_dir() -> Path:
@@ -201,10 +202,12 @@ def _limits(body: dict, now: datetime) -> list[dict]:
         # No reset and nothing used is a window that has not started: the vendor's own zero.
         unopened = resets is None and num and u == 0
         locked = w.get("locked_reason")
-        # `seven_day_<model>`: a weekly limit on one model, whichever models Anthropic adds.
-        model = name.removeprefix("seven_day_") if name.startswith("seven_day_") else None
-        scoped = {"role": "weekly_model", "scope": model.capitalize()} if model else {}
-        out.append(limit(name, window_minutes=10080 if model else WINDOWS.get(name), **scoped,
+        # `seven_day_<x>` is a weekly bucket; only a known model's is a model's weekly limit
+        # (`seven_day_oauth_apps` is not one).
+        bucket = name.removeprefix("seven_day_") if name.startswith("seven_day_") else None
+        scoped = ({"role": "weekly_model", "scope": bucket.capitalize()} if bucket in MODELS
+                  else {"role": "extra", "scope": bucket} if bucket else {})
+        out.append(limit(name, window_minutes=10080 if bucket else WINDOWS.get(name), **scoped,
                          used_at_least=0.0 if unopened else u / 100 if num
                          and resets is not None and resets > now else None,
                          resets_at=resets, held=locked is not None,
