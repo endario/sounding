@@ -82,6 +82,14 @@ class Render(unittest.TestCase):
         with mock.patch.dict(os.environ, {"HOME": str(home), "XDG_DATA_HOME": "", "OPENCODE_API_KEY": ""}):
             self.assertIn("OpenCode Go · 2\n", show.render([r], NOW))
 
+    def test_a_launcher_handed_opencode_key_is_named_by_its_variable(self):
+        home = Path(tempfile.mkdtemp())
+        from unlimited.adapters import opencode
+        r = reading("opencode", opencode.account_of("three"), NOW, "ok", limits=[])
+        with mock.patch.dict(os.environ, {"HOME": str(home), "XDG_DATA_HOME": "",
+                                          "OPENCODE_API_KEY": "", "OPENCODE_2_API_KEY": "three"}):
+            self.assertIn("OpenCode Go · OPENCODE_2_API_KEY\n", show.render([r], NOW))
+
     def credits(self, **kw):
         return credits(NOW, **{"enabled": True, "used": 0.0, "limit": 200.0, "balance": None,
                                "currency": "SGD", **kw})

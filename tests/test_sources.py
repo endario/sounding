@@ -276,6 +276,13 @@ class OpenCodeGo(Base):
         self.assertEqual(sorted(c.secret["key"] for c in got), ["key-one", "key-two"])
         self.assertEqual({c.account for c in got}, {opencode.account_of("key-one"), opencode.account_of("key-two")})
 
+    def test_a_numbered_launcher_key_is_also_an_account(self):
+        with mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(self.tmp / "data"),
+                                          "OPENCODE_API_KEY": "key-one", "OPENCODE_2_API_KEY": "key-two"}):
+            got = opencode.discover()
+        self.assertEqual(sorted(c.secret["key"] for c in got), ["key-one", "key-two"])
+        self.assertEqual({c.account for c in got}, {opencode.account_of("key-one"), opencode.account_of("key-two")})
+
 
 class Grok(Base):
     BODY = {"config": {"currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY",

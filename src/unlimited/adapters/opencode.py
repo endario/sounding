@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +20,9 @@ VENDOR = "opencode"
 URL = "https://opencode.ai/zen/go/v1/usage"
 # The month is anchored to the subscription day, so its length varies; 30 days names it.
 WINDOWS = {"rolling": ("five_hour", 300), "weekly": ("seven_day", 10080), "monthly": ("month", 43200)}
+# A second (or Nth) Go key that never went through `opencode auth login` on this machine — e.g.
+# one a launcher hands a worker by environment — names itself OPENCODE_2_API_KEY, OPENCODE_3_...
+ENV_KEY = re.compile(r"^OPENCODE(?:_\d+)?_API_KEY$")
 
 
 def _auth_file(data_home: Path) -> Path:
@@ -53,7 +57,7 @@ def account_of(key: str) -> str:
 
 
 def discover() -> list[Credential]:
-    keys = [key_in(d) for d in data_homes()] + [os.environ.get("OPENCODE_API_KEY")]
+    keys = [key_in(d) for d in data_homes()] + [v for k, v in os.environ.items() if ENV_KEY.match(k)]
     found = {account_of(k): k for k in keys if k}
     return [Credential(a, {"key": k}) for a, k in sorted(found.items())]
 
