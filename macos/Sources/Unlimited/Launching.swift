@@ -9,7 +9,7 @@ extension Launch {
     /// Typed into a new iTerm window, so the login shell supplies the `PATH` the wrapper needs:
     /// an app launched from the menu bar has none.
     func openTerminal() {
-        let command = "tmux new-session \(cli.path)"
+        let command = "tmux new-session '\(cli.path)'"
         let script = """
             tell application "iTerm"
                 activate
