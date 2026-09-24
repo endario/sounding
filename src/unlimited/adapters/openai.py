@@ -105,7 +105,7 @@ def _role(name: str, minutes: int | None) -> dict:
 
 def role(name: str, minutes: int | None) -> dict:
     """A cached limit's role, from the name `limits()` gave it."""
-    return _role(name.removesuffix(" (primary)").removesuffix(" (secondary)"), minutes)
+    return _role(name.removesuffix(" (secondary)"), minutes)
 
 
 def _session_limits(snap: dict, now: datetime) -> list[dict]:

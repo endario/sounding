@@ -100,8 +100,10 @@ class Statusline(Base):
 
     def test_an_old_cached_codex_limit_is_named_by_codex_not_by_the_shared_names(self):
         old = [{k: v for k, v in l.items() if k not in ("role", "scope")} for l in openai.limits(
-            {"rate_limit": {"primary_window": {"used_percent": 9, "limit_window_seconds": 604800,
-                                               "reset_at": int((NOW + timedelta(days=1)).timestamp())}}}, NOW)]
+            {"rate_limit": {"primary_window": {"used_percent": 9, "limit_window_seconds": 18000,
+                                               "reset_at": int((NOW + timedelta(hours=1)).timestamp())},
+                            "secondary_window": {"used_percent": 9, "limit_window_seconds": 604800,
+                                                 "reset_at": int((NOW + timedelta(days=1)).timestamp())}}}, NOW)]
         cache.default_dir().mkdir(parents=True)
         (cache.default_dir() / "openai.json").write_text(json.dumps({"readings": [
             {"schema": 1, "vendor": "openai", "account": "a", "taken_at": NOW.isoformat(), "source": "api",
@@ -109,7 +111,7 @@ class Statusline(Base):
         codex = SimpleNamespace(VENDOR="openai", read=None, role=openai.role,
                                 discover=lambda: [Credential("a", {})])
         got = cache.through(codex, max_age=300, clock=lambda: NOW + timedelta(seconds=60), get=None)[0]
-        self.assertEqual(got["limits"][0]["role"], "weekly")
+        self.assertEqual([l["role"] for l in got["limits"]], ["session", "weekly"])
 
     def test_capture_without_rate_limits_writes_nothing_and_the_cli_stays_silent(self):
         d = self.signed_in(".claude-account2")
