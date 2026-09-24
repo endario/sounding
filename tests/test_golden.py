@@ -50,7 +50,7 @@ def readings() -> list[dict]:
                                          "end": iso(days=5)}, "creditUsagePercent": 33}}
     return [
         reading("anthropic", "a" * 8, NOW, "ok", plan="default_claude_max_20x",
-                limits=anthropic._limits(claude, NOW) + anthropic._severity_limits(claude, NOW)),
+                limits=anthropic.limits(claude, NOW)),
         reading("openai", "o" * 8, NOW, "ok", plan="pro", limits=openai.limits(codex, NOW)),
         reading("zai", "z" * 8, NOW, "ok", plan="max", limits=zai.limits(glm, NOW)),
         reading("kimi", "k" * 8, NOW, "ok", limits=kimi.limits(kimi_body, NOW)),
@@ -70,9 +70,7 @@ def rendered() -> str:
 
 
 def _rendered() -> str:
-    with mock.patch.object(show, "_claude_dirs", dict), mock.patch.object(show, "_glm_wrappers", dict), \
-         mock.patch.object(show, "_kimi_wrappers", dict), mock.patch.object(show, "_opencode_identities", dict):
-        return show.render(readings(), NOW)
+    return show.render(readings(), NOW)
 
 
 class Golden(unittest.TestCase):

@@ -71,9 +71,13 @@ def limits(body: dict, now: datetime) -> list[dict]:
             resets = _seconds(w.get("reset_at"))
             pct = w.get("used_percent")
             secs = w.get("limit_window_seconds")
+            minutes = secs // 60 if isinstance(secs, int) and not isinstance(secs, bool) else None
+            # The main limit's windows are the plan's 5h/weekly, by length; the rest are extras.
+            role = {300: "session", 10080: "weekly"}.get(minutes) if name == "codex" else None
             out.append(limit(
                 name if which == "primary" else f"{name} ({which})",
-                window_minutes=secs // 60 if isinstance(secs, int) and not isinstance(secs, bool) else None,
+                window_minutes=minutes, role=role or ("extra" if minutes else None),
+                scope=None if role else name,
                 used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
                 and resets is not None and resets > now else None,
                 resets_at=resets, held=reached, held_why="limit_reached" if reached else None))

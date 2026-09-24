@@ -2,6 +2,7 @@ Claude Max 20x · aaaaaaaa
   5-hour          ██░░░░░░░░░░░░░░░░░░   9.0%  resets in  2h 00m  (Sat 14:00)
   weekly          ████████░░░░░░░░░░░░  40.0%  resets in   3d 0h  (Tue 12:00)
   weekly Opus     ██░░░░░░░░░░░░░░░░░░  12.0%  resets in   3d 0h  (Tue 12:00)
+  weekly Fable    █░░░░░░░░░░░░░░░░░░░   3.0%  resets in   3d 0h  (Tue 12:00)
 
 Codex Pro · oooooooo
   weekly          ██████████████████░░  91.0%  resets in   1d 0h  (Sun 12:00)
