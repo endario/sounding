@@ -61,12 +61,12 @@ def readings() -> list[dict]:
 
 def rendered() -> str:
     # Reset times print in local time; pin it so the file reads the same on every machine.
-    with mock.patch.dict(os.environ, {"TZ": "UTC"}):
-        time.tzset()
-        try:
-            return _rendered()
-        finally:
+    try:
+        with mock.patch.dict(os.environ, {"TZ": "UTC"}):
             time.tzset()
+            return _rendered()
+    finally:
+        time.tzset()
 
 
 def _rendered() -> str:
