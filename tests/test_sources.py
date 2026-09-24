@@ -292,6 +292,13 @@ class OpenCodeGo(Base):
             got = opencode.data_homes()
         self.assertEqual([p.name for p in got[1:]], [".opencode-2", ".opencode-10"])
 
+    def test_xdg_data_home_pointed_at_a_slot_is_not_listed_twice(self):
+        slot = self.home / ".opencode-2"
+        slot.mkdir()
+        with mock.patch.dict(os.environ, {"XDG_DATA_HOME": str(slot)}):
+            got = opencode.data_homes()
+        self.assertEqual(got, [slot])
+
 
 class Grok(Base):
     BODY = {"config": {"currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY",

@@ -40,7 +40,8 @@ def data_homes() -> list[Path]:
     slots = []
     for p in Path.home().glob(".opencode-*"):
         m = _SLOT.match(p.name)
-        if m and p.is_dir():
+        # A slot pointed at directly as XDG_DATA_HOME is already `default`; never list it twice.
+        if m and p.is_dir() and p.resolve() != default.resolve():
             slots.append((int(m.group(1)), p))
     return [default] + [p for _, p in sorted(slots)]
 
