@@ -17,6 +17,8 @@ public struct Card: Identifiable, Sendable {
     public let runsOut: String?
     /// Chance of running out, in percent, from past windows.
     public let odds: Int?
+    /// Whether the forecast rests on enough past windows to be more than this window's paces.
+    public let fromHistory: Bool
 
     /// How far a marker past 100% may bleed beyond the bar's end, in points.
     public static let bleed: Double = 3
@@ -44,7 +46,8 @@ public struct Card: Identifiable, Sendable {
                             resets: l.resetsAt.map { "Resets in \(until($0, now)) · \(clock($0, timeZone))" },
                             momentum: p?.recentAtReset,
                             projected: p.flatMap { $0.atReset.count == 2 ? ($0.atReset[0] + $0.atReset[1]) / 2 : nil },
-                            runsOut: ends, odds: p?.runOut.map { Int(($0 * 100).rounded()) })
+                            runsOut: ends, odds: p?.runOut.map { Int(($0 * 100).rounded()) },
+                            fromHistory: (p?.pastWindows ?? 0) >= Health.trustPastWindows)
             }
     }
 

@@ -39,6 +39,7 @@ func claude() throws -> Reading {
     #expect(cards[1].runsOut == "runs out in 2d 19h")
     #expect(cards[0].momentum == nil, "an older unlimited reports no recent pace")
     #expect(cards[0].odds == 18)
+    #expect(cards[0].fromHistory && !cards[1].fromHistory, "8 past windows back the 5-hour; 2 do not back the week")
     #expect(cards[2].projected == nil)
     #expect(cards[1].resets == "Resets in 3d 0h · Sun 06:00")
 }

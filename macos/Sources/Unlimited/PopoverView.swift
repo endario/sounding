@@ -101,6 +101,8 @@ struct CardView: View {
                         if let o = card.odds { Text("\(o)% chance").help("Of running out, from past windows") }
                     }
                     .font(.caption).monospacedDigit()
+                    // Italic: a guess from this window's paces alone, before past windows back it.
+                    .italic(!card.fromHistory)
                     .foregroundStyle(card.health == .normal ? Color.secondary : card.health.color)
                 }
             }
@@ -110,7 +112,7 @@ struct CardView: View {
     private func percent(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
 
     /// Used so far, a tick where an even pace would be by now, and where it is heading: today's
-    /// pace (⚡) marked above the bar, the forecast below. Past 100% a mark only just bleeds out.
+    /// pace marked above the bar, the forecast below. Past 100% a mark only just bleeds out.
     private var bar: some View {
         GeometryReader { g in
             let w = g.size.width
