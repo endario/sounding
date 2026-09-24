@@ -101,8 +101,7 @@ class Discovery(Base):
             self.assertEqual([(c.account, c.secret["token"]) for c in creds], [(UUID, "new")])
 
     def test_the_keychain_is_read_only_when_a_read_is_due(self):
-        # `security` runs once per keychain item; on every cache hit it was pure cost, and a
-        # menu bar polling every two minutes turned that into a steady stream of keychain reads.
+        # `security` runs once per keychain item; on every cache hit it was pure cost.
         self.signed_in(".claude-a")
         seen = []
         live = int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp() * 1000)

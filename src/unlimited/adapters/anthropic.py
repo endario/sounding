@@ -88,7 +88,7 @@ def _expiry(rec: dict) -> datetime | None:
 
 class _Token(Mapping):
     """An account's token, read from the keychain on first use. `discover()` runs on every
-    `cache.through`, and most of those are cache hits that never send a token."""
+    `cache.through`, including cache hits that send no token."""
 
     def __init__(self, dirs: list[Path]):
         self._dirs, self._got = dirs, None
