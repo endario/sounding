@@ -22,10 +22,10 @@ final class StripModel: ObservableObject {
     /// Changes the owner's arrangement and redraws the strip from the last reading.
     func arrange(_ change: (inout Preferences) -> Void) {
         change(&prefs)
+        save()
         redraw()
     }
 
-    /// A path chosen in Settings, used before the usual install locations.
     var customPath: String {
         get { UserDefaults.standard.string(forKey: Self.pathKey) ?? "" }
         set {
@@ -42,8 +42,12 @@ final class StripModel: ObservableObject {
         accounts = Tile.strip(lastRead, now: Date())
         tiles = prefs.apply(accounts)
         if tiles.isEmpty { tiles = [.waiting] }
-        if let data = try? JSONEncoder().encode(prefs) { UserDefaults.standard.set(data, forKey: Self.prefsKey) }
+        save()
         pace()
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(prefs) { UserDefaults.standard.set(data, forKey: Self.prefsKey) }
     }
     /// Why the strip is a single `!`, for the menu; nil when it reads.
     @Published private(set) var problem: String?

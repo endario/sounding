@@ -23,7 +23,8 @@ struct PopoverView: View {
                 }
                 footer(reading)
             } else {
-                Text("Reading…").foregroundStyle(.secondary)
+                Text(model.accounts.isEmpty ? "Reading…" : "Every account is hidden: see Settings.")
+                    .foregroundStyle(.secondary)
                 footer(nil)
             }
         }

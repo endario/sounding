@@ -33,6 +33,14 @@ public struct Preferences: Codable, Equatable, Sendable {
         if hide { hidden.insert(id) } else { hidden.remove(id) }
     }
 
+    /// One place up (-1) or down (+1) among the accounts that show, past any hidden between.
+    public mutating func step(_ id: String, by step: Int) {
+        let shown = order.filter { !hidden.contains($0) }
+        guard let i = shown.firstIndex(of: id), shown.indices.contains(i + step),
+              let target = order.firstIndex(of: shown[i + step]) else { return }
+        move(id, to: target)
+    }
+
     public mutating func move(_ id: String, to index: Int) {
         guard let from = order.firstIndex(of: id) else { return }
         order.remove(at: from)

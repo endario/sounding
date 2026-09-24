@@ -56,8 +56,7 @@ struct SettingsView: View {
     }
 
     private func move(_ t: Tile, by step: Int) {
-        guard let i = model.prefs.order.firstIndex(of: t.id) else { return }
-        model.arrange { $0.move(t.id, to: i + step) }
+        model.arrange { $0.step(t.id, by: step) }
     }
 
     private func setLogin(_ on: Bool) {

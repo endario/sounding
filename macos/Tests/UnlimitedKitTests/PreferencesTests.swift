@@ -28,6 +28,16 @@ func tiles() throws -> [Tile] { try Tile.strip(fixture(), now: now) }  // CL1 CL
     #expect(got.contains("GLM1"), "four characters at most, upper case")
 }
 
+@Test func stepsSkipHiddenAccountsSoOnePressAlwaysMovesAVisibleOne() throws {
+    var prefs = Preferences()
+    _ = prefs.apply(try tiles())            // CL1 CL2 CDX ...
+    prefs.hide("anthropic/a2", true)       // CL2
+    prefs.step("anthropic/a1", by: 1)
+    #expect(prefs.apply(try tiles()).prefix(2).map(\.label) == ["CDX", "CL1"])
+    prefs.step("anthropic/a1", by: -1)
+    #expect(prefs.apply(try tiles()).prefix(2).map(\.label) == ["CL1", "CDX"])
+}
+
 @Test func preferencesSurviveARoundTrip() throws {
     var prefs = Preferences()
     _ = prefs.apply(try tiles())
