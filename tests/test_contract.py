@@ -252,3 +252,12 @@ class Contract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Version(unittest.TestCase):
+    def test_version_prints_the_installed_release_so_a_consumer_can_require_a_minimum(self):
+        out = io.StringIO()
+        with mock.patch("importlib.metadata.version", lambda name: "0.0.22"), redirect_stdout(out), \
+             self.assertRaises(SystemExit) as done:
+            cli.main(["--version"])
+        self.assertEqual((done.exception.code, out.getvalue()), (0, "unlimited 0.0.22\n"))

@@ -12,8 +12,17 @@ from . import cache, transport
 from .adapters import REGISTRY
 
 
+def _version() -> str:
+    from importlib import metadata
+    try:
+        return metadata.version("unlimited")
+    except metadata.PackageNotFoundError:
+        return "unknown"  # run from a source tree, not installed
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="unlimited")
+    p.add_argument("--version", action="version", version=f"unlimited {_version()}")
     sub = p.add_subparsers(dest="cmd")
     st = sub.add_parser("status", help="usage per account, for people (the default)")
     for q in (p, st):
