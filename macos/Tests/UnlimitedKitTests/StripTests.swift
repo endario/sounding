@@ -41,6 +41,20 @@ func strip() throws -> [String: Tile] {
     #expect(tiles["CL1"]?.dimmed == false)
 }
 
-@Test func beforeAnyReadingTheStripIsOneWaitingTile() {
-    #expect(Tile.waiting.value == .waiting)
+@Test func withNoAccountsTheStripIsOneWaitingTile() {
+    #expect(Tile.strip([], now: now) == [.waiting])
+}
+
+@Test func accountsWithoutNamesAreNumberedApartNotLabelledTheSame() throws {
+    let two = try Reading.decode(Data("""
+    [{"schema": 1, "vendor": "openai", "account": "b", "status": "ok", "limits": []},
+     {"schema": 1, "vendor": "openai", "account": "a", "status": "ok", "limits": []}]
+    """.utf8))
+    #expect(Tile.strip(two, now: now).map { "\($0.label) \($0.id)" } == ["CDX1 openai/a", "CDX2 openai/b"])
+}
+
+@Test func aReadingInAnotherSchemaIsRefusedNotMisread() {
+    #expect(throws: Reading.SchemaError.self) {
+        try Reading.decode(Data(#"[{"schema": 2, "vendor": "openai", "status": "ok"}]"#.utf8))
+    }
 }

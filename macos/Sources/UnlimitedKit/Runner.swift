@@ -14,7 +14,8 @@ public struct Runner: Sendable {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }.map(Runner.init)
     }
 
-    public func read(maxAge: Int? = nil, timeout: TimeInterval = 20) throws -> [Reading] {
+    /// A cold read of every account measured 11.6 s; the timeout leaves room for a slow vendor.
+    public func read(maxAge: Int? = nil, timeout: TimeInterval = 45) throws -> [Reading] {
         try Reading.decode(run(["read", "--json"] + (maxAge.map { ["--max-age", String($0)] } ?? []), timeout: timeout))
     }
 

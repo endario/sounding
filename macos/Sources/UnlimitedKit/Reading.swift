@@ -1,7 +1,6 @@
 import Foundation
 
-/// One account's reading, as `unlimited read --json` prints it (schema 1). Only the fields the
-/// app draws are decoded; everything else stays in `unlimited`.
+/// One account's reading, as `unlimited read --json` prints it (schema 1).
 public struct Reading: Decodable, Sendable {
     public let vendor: String
     public let account: String?
@@ -23,13 +22,20 @@ public struct Reading: Decodable, Sendable {
             }
             return t
         }
-        return try d.decode([Reading].self, from: data)
+        let readings = try d.decode([Reading].self, from: data)
+        if let other = readings.first(where: { $0.schema != 1 }) { throw SchemaError(schema: other.schema) }
+        return readings
     }
 
-    enum CodingKeys: String, CodingKey { case vendor, account, takenAt, status, why, retryUntil, limits, names }
+    public struct SchemaError: Error { public let schema: Int }
+
+    public let schema: Int
+
+    enum CodingKeys: String, CodingKey { case schema, vendor, account, takenAt, status, why, retryUntil, limits, names }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try c.decode(Int.self, forKey: .schema)
         vendor = try c.decode(String.self, forKey: .vendor)
         account = try c.decodeIfPresent(String.self, forKey: .account)
         takenAt = try c.decodeIfPresent(Date.self, forKey: .takenAt)

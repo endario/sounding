@@ -14,7 +14,6 @@ final class StripModel: ObservableObject {
     private var versionChecked: Date?
 
     func start() {
-        runner = Runner.locate()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -27,6 +26,7 @@ final class StripModel: ObservableObject {
 
     func refresh() {
         guard !busy else { return }
+        runner = runner ?? Runner.locate()  // installed after launch: found on the next tick
         guard let runner else { return fail("unlimited not found in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin") }
         busy = true
         // The version is checked again only when the binary is replaced (an upgrade).
@@ -41,7 +41,9 @@ final class StripModel: ObservableObject {
                 switch result {
                 case .success(let readings):
                     self.problem = nil
-                    self.tiles = readings.isEmpty ? [.waiting] : Tile.strip(readings, now: Date())
+                    self.tiles = Tile.strip(readings, now: Date())
+                case .failure(let e as Reading.SchemaError):
+                    self.fail("unlimited speaks schema \(e.schema); this app reads schema 1")
                 case .failure(Problem.tooOld):
                     self.fail("unlimited is older than 0.0.21: run `uv tool install --force unlimited`")
                 case .failure:

@@ -37,13 +37,22 @@ public struct Tile: Identifiable, Equatable, Sendable {
         ("anthropic", "CL"), ("openai", "CDX"), ("zai", "ZAI"), ("kimi", "KMI"), ("opencode", "OPC"), ("xai", "GRK"),
     ]
 
-    /// Tiles in vendor order, then by label.
+    /// Tiles in vendor order, then by label; one waiting tile when there is nothing to show.
     public static func strip(_ readings: [Reading], now: Date) -> [Tile] {
         let order = Dictionary(uniqueKeysWithValues: vendors.enumerated().map { ($1.id, $0) })
-        return readings
+        let tiles = readings
             .map { tile($0, now: now) }
-            .sorted { (order[$0.vendor] ?? .max, $0.tile.label) < (order[$1.vendor] ?? .max, $1.tile.label) }
+            .sorted { (order[$0.vendor] ?? .max, $0.tile.label, $0.tile.id) < (order[$1.vendor] ?? .max, $1.tile.label, $1.tile.id) }
             .map(\.tile)
+        // Accounts without identity names (Codex, Grok) share a label; number them apart.
+        let counts = Dictionary(tiles.map { ($0.label, 1) }, uniquingKeysWith: +)
+        var seen: [String: Int] = [:]
+        let numbered = tiles.map { t -> Tile in
+            guard counts[t.label, default: 0] > 1 else { return t }
+            seen[t.label, default: 0] += 1
+            return Tile(id: t.id, label: t.label + String(seen[t.label]!), value: t.value, dimmed: t.dimmed)
+        }
+        return numbered.isEmpty ? [.waiting] : numbered
     }
 
     static func tile(_ r: Reading, now: Date) -> (vendor: String, tile: Tile) {
