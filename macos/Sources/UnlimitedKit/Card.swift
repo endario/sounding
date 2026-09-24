@@ -60,6 +60,7 @@ public struct Card: Identifiable, Sendable {
         let state = c.enabled ? "on" : c.disabledReason.map { "off: \($0)" } ?? "off"
         let money = { (v: Double) in String(format: "%.2f", v) }
         switch (c.used, c.limit) {
+        case (0?, nil), (nil, nil): return state  // never switched on, or nothing to say
         case let (used?, limit?): return "\(unit)\(money(used)) of \(money(limit)) · \(state)"
         case let (used?, nil): return "\(unit)\(money(used)) used · \(state)"
         default: return state
@@ -75,6 +76,7 @@ public struct Card: Identifiable, Sendable {
     public static func until(_ t: Date, _ now: Date) -> String {
         let s = Int(t.timeIntervalSince(now))
         guard s > 0 else { return "now" }
+        guard s >= 60 else { return "under a minute" }
         let (d, h, m) = (s / 86400, s % 86400 / 3600, s % 3600 / 60)
         return d > 0 ? "\(d)d \(h)h" : h > 0 ? String(format: "%dh %02dm", h, m) : "\(m)m"
     }

@@ -34,7 +34,8 @@ struct PopoverView: View {
     private func tabs(current: String) -> some View {
         HStack(spacing: 4) {
             ForEach(vendors, id: \.self) { v in
-                Button(Tile.vendorName(v)) { model.selected = model.tiles.first { $0.vendor == v }?.id }
+                Button(Tile.vendorTab(v)) { model.selected = model.tiles.first { $0.vendor == v }?.id }
+                    .help(Tile.vendorName(v))
                     .buttonStyle(.plain)
                     .font(.callout.weight(v == current ? .semibold : .regular))
                     .padding(.horizontal, 8).padding(.vertical, 4)
@@ -68,7 +69,10 @@ struct PopoverView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text([Card.plan(r), r.names.joined(separator: ", ")].compactMap { $0 }.filter { !$0.isEmpty }
                             .joined(separator: " · "))
-                    if let at = r.takenAt { Text("Read \(Card.until(Date(), at)) ago").foregroundStyle(.secondary) }
+                    if let at = r.takenAt {
+                        Text(Date().timeIntervalSince(at) < 60 ? "Read just now" : "Read \(Card.until(Date(), at)) ago")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()
@@ -106,7 +110,10 @@ struct CardView: View {
                 }
                 bar
                 if let resets = card.resets { Text(resets).font(.caption).foregroundStyle(.secondary) }
-                if let forecast = card.forecast { Text(forecast).font(.caption).foregroundStyle(card.health.color) }
+                if let forecast = card.forecast {
+                    Text(forecast).font(.caption).foregroundStyle(card.health.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

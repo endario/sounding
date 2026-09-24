@@ -44,6 +44,14 @@ func claude() throws -> Reading {
     #expect(Card.credits(try claude()) == "SGD 150.62 of 150.00 · off: org_level_disabled_until")
 }
 
+@Test func creditsNeverSwitchedOnJustSayOff() throws {
+    let r = try #require(Reading.decode(Data("""
+    [{"schema": 1, "vendor": "anthropic", "status": "ok",
+      "credits": {"enabled": false, "used": 0.0, "limit": null, "currency": "USD"}}]
+    """.utf8)).first)
+    #expect(Card.credits(r) == "off")
+}
+
 @Test func thePlanReadsInAPersonsWords() throws {
     #expect(Card.plan(try claude()) == "Max 20x")
 }
@@ -58,4 +66,5 @@ func claude() throws -> Reading {
     #expect(at(4 + 29 * 7 + 2) == "OPC2", "the padding after the last")
     #expect(tiles.map(\.vendor).first == "anthropic")
     #expect(Tile.vendorName("zai") == "Z.ai" && Tile.vendorName("new") == "new")
+    #expect(Tile.vendorTab("anthropic") == "CLA" && Tile.vendorTab("newco") == "NEW")
 }
