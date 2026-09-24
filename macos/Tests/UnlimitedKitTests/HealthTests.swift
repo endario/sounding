@@ -116,7 +116,7 @@ func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
 }
 
 @Test func anAccountEarlyInItsWeekIsJudgedByWhatItHasUsedNotByAnUntrustedForecast() {
-    // Half a day in, 5% used: its forecast of 103% is a guess, and it has the most room.
+    // Half a day in: its forecast of 103% is a guess, and it has the most room.
     let early = account("1", weekly: [0.6, 1.03], elapsed: 0.5, past: 0)
     let tiles = Tile.strip([early, account("2", weekly: [0.85, 0.94])], now: now)
     #expect(tiles.filter(\.best).map(\.label) == ["ZAI1"])
