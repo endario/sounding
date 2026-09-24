@@ -60,9 +60,16 @@ public struct Tile: Identifiable, Equatable, Sendable {
     /// Tunable: a reading older than this says nothing about now.
     public static let staleAfter: TimeInterval = 15 * 60
 
-    static let vendors: [(id: String, code: String)] = [
-        ("anthropic", "CL"), ("openai", "CDX"), ("zai", "ZAI"), ("kimi", "KMI"), ("opencode", "OPC"), ("xai", "GRK"),
+    static let vendors: [(id: String, code: String, name: String)] = [
+        ("anthropic", "CL", "Claude"), ("openai", "CDX", "Codex"), ("zai", "ZAI", "Z.ai"), ("kimi", "KMI", "Kimi"),
+        ("opencode", "OPC", "OpenCode"), ("xai", "GRK", "Grok"),
     ]
+
+    /// The vendor's name for a person; an unknown vendor shows its id.
+    public static func vendorName(_ id: String) -> String { vendors.first { $0.id == id }?.name ?? id }
+
+    /// The vendor a tile's account belongs to.
+    public var vendor: String { String(id.prefix { $0 != "/" }) }
 
     /// Tiles in vendor order, then by label; one waiting tile when there is nothing to show.
     public static func strip(_ readings: [Reading], now: Date) -> [Tile] {
