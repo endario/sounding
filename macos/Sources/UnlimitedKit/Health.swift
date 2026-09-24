@@ -9,7 +9,8 @@ public enum Health: Int, Comparable, Sendable {
 
     /// Tunable: a window heading to reset below this has room to spare.
     public static let roomBelow = 0.7
-    /// Tunable: a projection before this much of its window, with no past windows, is a guess.
+    /// Tunable: before this much of its window, and with fewer past windows than
+    /// `trustPastWindows`, a projection is not drawn.
     public static let trustAfter = 0.1
     public static let trustPastWindows = 3
 }

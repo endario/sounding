@@ -61,3 +61,17 @@ func week(used: Double?, range: [Double]?, elapsed: Double = 3, past: Int = 0, h
     #expect(t.health == .red)
     #expect(t.alternate == nil, "the 5h window is red too, but no worse than weekly")
 }
+
+@Test func aTileWhoseSessionIsWorseThanItsWeeklyShowsTheSessionToo() throws {
+    let data = Data("""
+    [{"schema": 1, "vendor": "zai", "account": "z", "status": "ok", "taken_at": "2026-09-24T05:59:00+00:00",
+      "names": ["claude-glm"], "limits": [
+       {"name": "seven_day", "window_minutes": 10080, "used_at_least": 0.05, "resets_at": "2026-09-28T09:28:00+00:00",
+        "role": "weekly", "projection": {"at_reset": [0.1, 0.2], "past_windows": 5}},
+       {"name": "five_hour", "window_minutes": 300, "used_at_least": 0.9, "resets_at": "2026-09-24T07:00:00+00:00",
+        "role": "session", "projection": {"at_reset": [0.95, 1.2], "past_windows": 5}}]}]
+    """.utf8)
+    let t = try #require(Tile.strip(Reading.decode(data), now: now).first)
+    #expect(t.health == .useMore)
+    #expect(t.alternate == Tile.Alternate(role: "session", value: .percent(90), health: .amber))
+}

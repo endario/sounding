@@ -44,7 +44,7 @@ struct TileView: View {
                         Image(systemName: alt.glyph).font(.system(size: 6, weight: .bold))
                         Text(alt.value.text)
                     }
-                    .foregroundStyle(Health.red.color)
+                    .foregroundStyle(alt.health.color)
                     .opacity(showAlt ? 1 : 0)
                 }
             }
@@ -53,8 +53,8 @@ struct TileView: View {
         }
         // With Reduce Motion there is no cross-fade: a corner dot says another window is worse.
         .overlay(alignment: .topTrailing) {
-            if reduceMotion, tile.alternate != nil {
-                Circle().fill(Health.red.color).frame(width: 3, height: 3)
+            if reduceMotion, let alt = tile.alternate {
+                Circle().fill(alt.health.color).frame(width: 3, height: 3)
             }
         }
         .opacity(tile.dimmed ? 0.45 : 1)

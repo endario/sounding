@@ -25,6 +25,7 @@ public struct Tile: Identifiable, Equatable, Sendable {
     public struct Alternate: Equatable, Sendable {
         public let role: String
         public let value: Value
+        public let health: Health
     }
 
     public let id: String
@@ -98,7 +99,8 @@ public struct Tile: Identifiable, Equatable, Sendable {
         let id = "\(r.vendor)/\(r.account ?? "")"
         let usable = r.status == "ok" && !(stale && !throttled)
         let alt = usable ? override(r.limits, weekly: r.weekly, now: now).map {
-            Alternate(role: $0.role ?? "", value: $0.usedAtLeast.map { .percent(Int(($0 * 100).rounded())) } ?? .unknown)
+            Alternate(role: $0.role ?? "", value: $0.usedAtLeast.map { .percent(Int(($0 * 100).rounded())) } ?? .unknown,
+                      health: $0.health(now: now))
         } : nil
         return (r.vendor, Tile(id: id, label: label(r), value: value, dimmed: throttled || !usable,
                                health: usable ? r.weekly?.health(now: now) ?? .normal : .normal, alternate: alt))
