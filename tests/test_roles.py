@@ -1,6 +1,5 @@
 """Each limit says what kind of window it is (`role`) and, where the vendor scopes it, to what
-(`scope`), so a consumer never guesses from vendor names. A real window is never `None`: that
-would hide it from every consumer."""
+(`scope`), so a consumer never guesses from vendor names."""
 
 from __future__ import annotations
 
@@ -57,6 +56,22 @@ class Roles(unittest.TestCase):
                                                  "reset_at": secs(hours=1)}}}
         self.assertEqual(roles({"limits": openai.limits(odd, NOW)}), {"codex": ("extra", "codex")})
 
+    def test_a_codex_session_log_names_its_windows_like_the_api_does(self):
+        got = openai._session_limits({"limit_id": "codex", "primary": {"used_percent": 1, "window_minutes": 300,
+                                                                       "resets_at": secs(hours=1)},
+                                      "secondary": {"used_percent": 2, "window_minutes": 10080,
+                                                    "resets_at": secs(days=1)}}, NOW)
+        self.assertEqual(roles({"limits": got}), {"codex": ("session", None), "codex (secondary)": ("weekly", None)})
+        extra = openai._session_limits({"limit_id": "x", "limit_name": "gpt-reserve", "primary": {
+            "used_percent": 0, "window_minutes": 10080, "resets_at": secs(days=1)}}, NOW)
+        self.assertEqual(roles({"limits": extra}), {"gpt-reserve": ("extra", "gpt-reserve")})
+
+    def test_a_scoped_severity_entry_for_a_non_model_bucket_is_not_shown_twice(self):
+        body = {"seven_day_haiku": {"utilization": 1, "resets_at": iso(days=1)},
+                "limits": [{"kind": "weekly_scoped", "group": "weekly", "percent": 1, "resets_at": iso(days=1),
+                            "scope": {"model": {"display_name": "Haiku"}}}]}
+        self.assertEqual([l["role"] for l in anthropic.limits(body, NOW)], ["extra", None])
+
     def test_the_other_vendors_name_session_weekly_and_month(self):
         self.assertEqual(self.by["zai"], {"five_hour": ("session", None), "seven_day": ("weekly", None),
                                           "time_limit 5x1": (None, None)})
@@ -66,7 +81,6 @@ class Roles(unittest.TestCase):
         self.assertEqual(self.by["xai"], {"seven_day": ("weekly", None)})
 
     def test_a_real_window_nobody_recognises_is_extra_never_hidden(self):
-        # One per adapter: each builds its limits through `limit()`, which owns the default.
         unknown = {
             "kimi": kimi.limits({"limits": [{"window": {"duration": 1, "timeUnit": "DAY"},
                                              "detail": {"used": "1", "limit": "10", "resetTime": iso(hours=1)}}]}, NOW),

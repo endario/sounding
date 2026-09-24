@@ -50,7 +50,7 @@ work across subscriptions (one limit shown):
       "disabled_reason": null,
       "can_purchase": false
     },
-    "names": ["account1"],
+    "names": ["work"],
     "limits": [
       {
         "name": "seven_day",

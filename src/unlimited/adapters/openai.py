@@ -72,12 +72,9 @@ def limits(body: dict, now: datetime) -> list[dict]:
             pct = w.get("used_percent")
             secs = w.get("limit_window_seconds")
             minutes = secs // 60 if isinstance(secs, int) and not isinstance(secs, bool) else None
-            # The main limit's windows are the plan's 5h/weekly, by length; the rest are extras.
-            role = {300: "session", 10080: "weekly"}.get(minutes) if name == "codex" else None
             out.append(limit(
                 name if which == "primary" else f"{name} ({which})",
-                window_minutes=minutes, role=role or ("extra" if minutes else None),
-                scope=None if role else name,
+                window_minutes=minutes, **_role(name, minutes),
                 used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
                 and resets is not None and resets > now else None,
                 resets_at=resets, held=reached, held_why="limit_reached" if reached else None))
@@ -99,6 +96,13 @@ def read(cred: Credential, now: datetime, get) -> dict:
                    plan=plan if isinstance(plan, str) else None)
 
 
+def _role(name: str, minutes: int | None) -> dict:
+    """The main limit's windows are the plan's 5h and weekly, told apart by length; any other
+    window, and every additional limit, is an extra named by its limit."""
+    role = {300: "session", 10080: "weekly"}.get(minutes) if name == "codex" else None
+    return {"role": role or ("extra" if minutes else None), "scope": None if role or not minutes else name}
+
+
 def _session_limits(snap: dict, now: datetime) -> list[dict]:
     """One `rate_limits` snapshot from a Codex session log, in the same shape `limits()` gives
     `/wham/usage`."""
@@ -110,10 +114,11 @@ def _session_limits(snap: dict, now: datetime) -> list[dict]:
             continue
         resets = _seconds(w.get("resets_at"))
         pct, mins = w.get("used_percent"), w.get("window_minutes")
+        mins = mins if isinstance(mins, int) and not isinstance(mins, bool) else None
         reached = snap.get("rate_limit_reached_type") is not None
         out.append(limit(
             name if which == "primary" else f"{name} ({which})",
-            window_minutes=mins if isinstance(mins, int) and not isinstance(mins, bool) else None,
+            window_minutes=mins, **_role(name, mins),
             used_at_least=pct / 100 if isinstance(pct, (int, float)) and not isinstance(pct, bool)
             and resets is not None and resets > now else None,
             resets_at=resets, held=reached, held_why="limit_reached" if reached else None))

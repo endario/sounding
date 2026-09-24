@@ -217,11 +217,12 @@ def _limits(body: dict, now: datetime) -> list[dict]:
 
 def limits(body: dict, now: datetime) -> list[dict]:
     out = _limits(body, now) + _severity_limits(body, now)
-    models = {l["scope"] for l in out if l["role"] == "weekly_model"}
+    # Every `seven_day_<x>` bucket, model or not, already reports its window.
+    buckets = {l["name"].removeprefix("seven_day_") for l in out if l["name"].startswith("seven_day_")}
     for i, l in enumerate(out):
         # A model's weekly limit reported only as a severity entry (Fable) is its one report.
         model = l["name"].removeprefix("limits:weekly_scoped:") if l["name"].startswith("limits:weekly_scoped:") else None
-        if model and model.capitalize() not in models and l["window_minutes"]:
+        if model and model.lower() not in buckets and l["window_minutes"]:
             out[i] = dict(l, role="weekly_model", scope=model)
     return out
 
