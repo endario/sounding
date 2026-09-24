@@ -49,19 +49,20 @@ def _glm_wrappers() -> dict[str, str]:
 
 
 def _opencode_identities() -> dict[str, str]:
-    """OpenCode Go account id → the isolated data directory or launcher variable holding its key,
-    by a short name."""
+    """OpenCode Go account id → every isolated data directory or launcher variable holding its
+    key, by a short name."""
     from .adapters import opencode
-    out: dict[str, str] = {}
+    out: dict[str, list[str]] = {}
     for i, d in enumerate(opencode.data_homes()):
         key = opencode.key_in(d)
         if key:
             # The default XDG_DATA_HOME carries no ".opencode-N" name of its own.
-            out[opencode.account_of(key)] = "account1" if i == 0 else d.name.removeprefix(".opencode-")
+            name = "account1" if i == 0 else d.name.removeprefix(".opencode-")
+            out.setdefault(opencode.account_of(key), []).append(name)
     for k, v in os.environ.items():
         if opencode.ENV_KEY.match(k) and v:
-            out.setdefault(opencode.account_of(v), k)
-    return out
+            out.setdefault(opencode.account_of(v), []).append(k)
+    return {k: ", ".join(dict.fromkeys(v)) for k, v in out.items()}
 
 
 def _kimi_wrappers() -> dict[str, str]:

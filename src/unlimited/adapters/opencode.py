@@ -6,14 +6,13 @@ status. Verified live 2026-09-19."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 
-from ..credential import Credential
+from ..credential import Credential, account_of, dedupe
 from ..schema import OK, UNREAD, failed, limit, reading
 
 VENDOR = "opencode"
@@ -23,6 +22,9 @@ WINDOWS = {"rolling": ("five_hour", 300), "weekly": ("seven_day", 10080), "month
 # A second (or Nth) Go key that never went through `opencode auth login` on this machine — e.g.
 # one a launcher hands a worker by environment — names itself OPENCODE_2_API_KEY, OPENCODE_3_...
 ENV_KEY = re.compile(r"^OPENCODE(?:_\d+)?_API_KEY$")
+# The exact shape the provisioning wizard creates: a numbered slot, never an open-ended prefix
+# match, so a renamed or unrelated ".opencode-backup" is never mistaken for a live identity.
+_SLOT = re.compile(r"^\.opencode-(\d+)$")
 
 
 def _auth_file(data_home: Path) -> Path:
@@ -30,13 +32,17 @@ def _auth_file(data_home: Path) -> Path:
 
 
 def data_homes() -> list[Path]:
-    """The default XDG_DATA_HOME, plus every isolated one (`~/.opencode-2`, `~/.opencode-3`, ...).
-    auth.json holds one key per provider name, so a second concurrent Go subscription needs its
-    own data directory, the same isolation this machine already uses for a second Claude or GLM
-    account; none may narrow discovery to just the default."""
+    """The default XDG_DATA_HOME, plus every isolated one (`~/.opencode-2`, `~/.opencode-3`, ...),
+    in slot order. auth.json holds one key per provider name, so a second concurrent Go
+    subscription needs its own data directory, the same isolation this machine already uses for a
+    second Claude or GLM account; none may narrow discovery to just the default."""
     default = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    extra = sorted(p for p in Path.home().glob(".opencode-*") if p.is_dir())
-    return [default] + extra
+    slots = []
+    for p in Path.home().glob(".opencode-*"):
+        m = _SLOT.match(p.name)
+        if m and p.is_dir():
+            slots.append((int(m.group(1)), p))
+    return [default] + [p for _, p in sorted(slots)]
 
 
 def key_in(data_home: Path) -> str | None:
@@ -51,15 +57,9 @@ def key_in(data_home: Path) -> str | None:
     return None
 
 
-def account_of(key: str) -> str:
-    # The key names no account, so a truncated hash of it stands in.
-    return hashlib.sha256(key.encode()).hexdigest()[:16]
-
-
 def discover() -> list[Credential]:
     keys = [key_in(d) for d in data_homes()] + [v for k, v in os.environ.items() if ENV_KEY.match(k)]
-    found = {account_of(k): k for k in keys if k}
-    return [Credential(a, {"key": k}) for a, k in sorted(found.items())]
+    return dedupe(keys)
 
 
 def _iso(v: object) -> datetime | None:

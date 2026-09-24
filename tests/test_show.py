@@ -90,6 +90,17 @@ class Render(unittest.TestCase):
                                           "OPENCODE_API_KEY": "", "OPENCODE_2_API_KEY": "three"}):
             self.assertIn("OpenCode Go · OPENCODE_2_API_KEY\n", show.render([r], NOW))
 
+    def test_the_same_opencode_key_reachable_two_ways_shows_both_not_one(self):
+        home = Path(tempfile.mkdtemp())
+        d = home / ".local" / "share" / "opencode"
+        d.mkdir(parents=True)
+        (d / "auth.json").write_text('{"opencode-go": {"type": "api", "key": "one"}}')
+        from unlimited.adapters import opencode
+        r = reading("opencode", opencode.account_of("one"), NOW, "ok", limits=[])
+        with mock.patch.dict(os.environ, {"HOME": str(home), "XDG_DATA_HOME": "",
+                                          "OPENCODE_API_KEY": "one"}):
+            self.assertIn("OpenCode Go · account1, OPENCODE_API_KEY\n", show.render([r], NOW))
+
     def credits(self, **kw):
         return credits(NOW, **{"enabled": True, "used": 0.0, "limit": 200.0, "balance": None,
                                "currency": "SGD", **kw})

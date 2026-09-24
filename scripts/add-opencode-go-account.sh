@@ -173,17 +173,22 @@ except (OSError, ValueError) as e:
     print(f"invalid:{e}")
     sys.exit(0)
 
-entry = new.get("opencode-go")
-if not isinstance(entry, dict) or entry.get("type") != "api" or not isinstance(entry.get("key"), str) or not entry["key"]:
+def go_key(auth):
+    for provider in ("opencode-go", "opencode"):
+        entry = auth.get(provider)
+        if isinstance(entry, dict) and entry.get("type") == "api" and isinstance(entry.get("key"), str) and entry["key"]:
+            return entry["key"]
+    return None
+
+new_key = go_key(new) if isinstance(new, dict) else None
+if not new_key:
     print("missing")
     sys.exit(0)
 
-new_key = entry["key"]
 same_as_default = False
 try:
     old = json.loads(open(default_auth).read())
-    old_entry = old.get("opencode-go")
-    if isinstance(old_entry, dict) and old_entry.get("key") == new_key:
+    if go_key(old) == new_key:
         same_as_default = True
 except (OSError, ValueError):
     pass
@@ -217,7 +222,6 @@ note "auth file:  $AUTH_FILE"
 printf '\n'
 say "Launch opencode against this identity with:"
 printf '\n    %sXDG_DATA_HOME=%s opencode ...%s\n\n' "$BOLD" "$DATA_HOME" "$RESET"
-warn "unlimited's opencode adapter does not discover ~/.opencode-* yet — that"
-warn "code change lands separately; until it does, 'unlimited read' still only"
-warn "reports the default account."
+note "unlimited already discovers every ~/.opencode-N identity — 'unlimited read'"
+note "will report this account on its next run."
 printf '\n'
