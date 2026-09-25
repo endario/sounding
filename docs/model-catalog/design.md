@@ -34,7 +34,6 @@ standard = "opencode-go/deepseek-v4.1-flash"
 harness = "opencode"
 usage = "opencode"
 standard = "opencode-go/muse-spark-1.3-contributor"
-trains_on_input = true        # the vendor trains on what it is sent
 
 [providers.stealth]           # unnamed preview models, whoever makes them
 harness = "opencode"
@@ -45,6 +44,8 @@ harness = "codex"
 usage = "openai"
 standard = "gpt-6-luna"
 heavy = "gpt-6-sol"
+
+banned = []                   # model ids never offered, wherever they are listed
 
 [[promotions]]
 provider = "stealth"
@@ -82,7 +83,7 @@ installed package.
 ## Interface
 
 Library (2mw2lt): `unlimited.catalog.load(now) -> Catalog`, with
-`Catalog.providers` (id → harness, usage, per-tier model, trains_on_input) and
+`Catalog.providers` (id → harness, usage, per-tier model) and
 `Catalog.candidates(tier, now) -> [(provider, model, promoted)]`: live promotions first, in file
 order, then every provider with a model at the tier.
 
@@ -100,18 +101,14 @@ when the author was stealth or unknown.
 
 ## Makers and independence
 
-Provider ids are makers. 2mw2lt's `_MODEL_OF` gains `("muse", "meta")`, and a stealth model's id is
-mapped by the catalog (any model listed under `stealth`) rather than by name, since a stealth name
-says nothing. Stealth is an ordinary provider: independent of every other, never of itself.
+Provider ids are makers. 2mw2lt's `_MODEL_OF` gains `("muse", "meta")`, and a stealth model is
+mapped by the catalog (any model listed under `stealth`, in a promotion or a tier) rather than by
+name, since a stealth name says nothing. Stealth is an ordinary provider: independent of every other
+provider, never of itself. Which rounds it may take follows from its tiers like any provider's: a
+stealth model listed at `heavy` can take a heavy final round, one only at `standard` cannot.
 
-## Open questions
-
-1. `trains_on_input`: consumers need a rule. Proposed: a provider with it set is skipped when the
-   repo under work is private. Owner to confirm (the alternative is never).
-2. Usage balancing: deepseek, meta and stealth all spend the same Go plan. The runner's `balance.py`
-   picks the limit it scores by provider name today (`scored_limit`, `short_limits`); it moves to
-   keying those on the catalog's `usage` vendor, so any opencode-harness provider scores the Go
-   plan's weekly limit.
+Banning is by model id, in `banned`: a banned model is never a candidate, as a tier's model or a
+promotion's. There is no per-repo or per-data-policy rule.
 
 ## Testing
 
