@@ -28,9 +28,8 @@ def dedupe(keys: list[str | None]) -> list[Credential]:
 
 
 def env_value(path: Path, var: str) -> str | None:
-    """`var` as a shell sourcing `path` would leave it: the last assignment wins, a quoted value is
-    taken whole, and an unquoted one ends at a comment.
-    None when unset, empty or unreadable."""
+    """`var` in `path`, parsed shell-like: the last assignment wins, a quoted value is taken whole,
+    and an unquoted one ends at a comment. None when unset, empty or unreadable."""
     found = None
     try:
         lines = path.read_text().splitlines()
