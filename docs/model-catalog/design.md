@@ -68,14 +68,15 @@ the local file when it has the key at all, so removing a shipped promotion is de
 A local file that does not parse is an error the consumer sees, never a silent fall-back to the
 shipped copy: a curated list that quietly stops applying is the failure this exists to avoid.
 
-A local file whose `schema` differs from the shipped one is an error, for the same reason.
+A local file must state `schema`, and one that differs from the shipped one is an error, for the
+same reason. `banned` is the union of both files.
 
 ## Loading
 
 Read at call time, never at import: 2mw2lt's daemon imports `gates` without reading a catalog.
-A broken catalog fails the routing call that asked, loudly. It never falls back to treating a model
-as independent: when the catalog cannot be read, a consumer routes as it did before the catalog
-existed or not at all, never more permissively.
+A broken catalog fails the routing call that asked, loudly: the run does not start. Consumers keep
+no compiled copy to fall back on, so there is one list, and a broken one is never quietly replaced
+by an older one.
 
 The shipped file is package data, so the wheel must carry it; a test asserts it loads from the
 installed package.
@@ -85,12 +86,16 @@ installed package.
 Library (2mw2lt): `unlimited.catalog.load(now) -> Catalog`, with
 `Catalog.providers` (id → harness, usage, per-tier model) and
 `Catalog.candidates(tier, now) -> [(provider, model, promoted)]`: live promotions first, in file
-order, then every provider with a model at the tier.
+order, then every provider with a model at the tier, in file order; banned models omitted.
 
 CLI (runner): `unlimited models [--tier standard|heavy] --json` prints the same list, plus
 `unlimited models --provider <id> --tier <t>` printing one model id.
 
-Expired promotions are dropped at read time by `until` against `now`; nothing edits the file.
+Expired promotions are dropped at read time: `until` is a date, and the promotion is live through
+the end of that day in UTC. Nothing edits the file.
+
+unlimited's README states the widened role: it reports usage and it lists what can run; which
+account or model to use is still the consumer's choice.
 
 ## Promotions first, errors fall through
 
@@ -104,11 +109,14 @@ when the author was stealth or unknown.
 Provider ids are makers. 2mw2lt's `_MODEL_OF` gains `("muse", "meta")`, and a stealth model is
 mapped by the catalog (any model listed under `stealth`, in a promotion or a tier) rather than by
 name, since a stealth name says nothing. Stealth is an ordinary provider: independent of every other
-provider, never of itself. Which rounds it may take follows from its tiers like any provider's: a
+provider, never of itself. This is an accepted owner decision, not a property: a stealth model that is
+in fact the author's own maker's goes undetected. Where a model id is in the catalog, the catalog's
+provider decides its maker; `_MODEL_OF`'s name match applies only to ids the catalog does not list. Which rounds it may take follows from its tiers like any provider's: a
 stealth model listed at `heavy` can take a heavy final round, one only at `standard` cannot.
 
 Banning is by model id, in `banned`: a banned model is never a candidate, as a tier's model or a
-promotion's. There is no per-repo or per-data-policy rule.
+promotion's. There is no per-repo or per-data-policy rule: a model the owner will not
+send work to (Muse Contributor trains on its input) is banned outright.
 
 ## Usage balancing
 
@@ -127,7 +135,10 @@ catalog.
 Each step is its own PR, and each works before the next exists.
 
 1. unlimited ships the catalog and `unlimited models` (release).
-2. agent-runner reads it: `tier_model`, the deepseek-only guard, and `balance.py`'s provider-keyed
-   limit choice go; meta and stealth become routable.
-3. 2mw2lt reads it at call time: `PROFILE` models and `OPENCODE_MODEL` go; `meta` and `stealth`
+2. agent-runner reads it for the named providers it has: `tier_model` goes.
+3. agent-runner generalises its per-provider branches onto `harness` (binary resolution, auth,
+   preflight, `balance.py`'s `scored_limit`/`short_limits`/`ACCOUNTS` by `usage`), replaces the
+   deepseek-only guard with the catalog check, and takes promotions: meta and stealth become
+   routable.
+4. 2mw2lt reads it at call time: `PROFILE` models and `OPENCODE_MODEL` go; `meta` and `stealth`
    join reviewers.
