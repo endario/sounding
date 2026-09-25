@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..credential import Credential, account_of, dedupe
-from ..schema import OK, credits, failed, limit, moment, reading
+from ..schema import OK, UNREAD, credits, failed, limit, moment, reading
 
 VENDOR = "neuralwatt"
 URL = "https://api.neuralwatt.com/v1/quota"
@@ -60,12 +60,12 @@ def limits(body: dict) -> list[dict]:
     sub = body.get("subscription") if isinstance(body.get("subscription"), dict) else {}
     included, used = _num(sub.get("kwh_included")), _num(sub.get("kwh_used"))
     if included:
-        start, end = _utc(sub.get("current_period_start")), _utc(sub.get("current_period_end"))
-        minutes = int((end - start).total_seconds() // 60) if start and end else 43200
-        # The allowance resets monthly even on an annual plan, whose period is the year.
-        out.append(limit("month", window_minutes=min(minutes, 43200),
+        # An annual plan's allowance resets every 30 days, not at its period's end.
+        annual = sub.get("billing_interval") == "year"
+        out.append(limit("month", window_minutes=43200,
                          used_at_least=used / included if used is not None else None,
-                         resets_at=end if minutes <= 43200 else None, held=sub.get("in_overage") is True,
+                         resets_at=None if annual else _utc(sub.get("current_period_end")),
+                         held=sub.get("in_overage") is True,
                          held_why="overage" if sub.get("in_overage") is True else None))
     key = body.get("key") if isinstance(body.get("key"), dict) else {}
     allow = key.get("allowance") if isinstance(key.get("allowance"), dict) else {}
@@ -94,5 +94,7 @@ def read(cred: Credential, now: datetime, get) -> dict:
         return failed(VENDOR, cred.account, now, ans)
     sub = ans.body.get("subscription") if isinstance(ans.body.get("subscription"), dict) else {}
     plan = sub.get("plan") if isinstance(sub.get("plan"), str) else None
-    return reading(VENDOR, cred.account, now, OK, limits=limits(ans.body), plan=plan,
-                   credits=_credits(ans.body, now))
+    found, spend = limits(ans.body), _credits(ans.body, now)
+    if not found and spend is None:
+        return reading(VENDOR, cred.account, now, UNREAD, why="no-limits")
+    return reading(VENDOR, cred.account, now, OK, limits=found, plan=plan, credits=spend)

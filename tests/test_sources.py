@@ -440,6 +440,16 @@ class Neuralwatt(Base):
         with mock.patch.dict(os.environ, {"NEURALWATT_API_KEY": "sk-one"}):
             got = neuralwatt.discover()
         self.assertEqual(sorted(c.secret["key"] for c in got), ["sk-one", "sk-two"])
+        self.assertEqual(neuralwatt.names()[neuralwatt.account_of("sk-two")], ["neuralwatt-2"])
+
+    def test_an_annual_plans_allowance_has_no_reset_at_the_years_end(self):
+        body = dict(self.SUB, subscription=dict(self.SUB["subscription"], billing_interval="year"))
+        (month, _) = neuralwatt.limits(body)
+        self.assertEqual((month["resets_at"], month["used_at_least"]), (None, 0.25))
+
+    def test_an_answer_with_nothing_recognised_is_unread(self):
+        got = neuralwatt.read(Credential("a", {"key": "k"}), NOW, self.up(Answer({"snapshot_at": "x"}, 200, None)))
+        self.assertEqual((got["status"], got["why"]), ("unread", "no-limits"))
 
 
 class Zai(Base):
