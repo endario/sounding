@@ -67,7 +67,7 @@ def _check(c: dict) -> None:
             if t in p and not isinstance(p[t], str):
                 raise CatalogError(f"provider {name}: {t} is not a model id")
     for i, promo in enumerate(c.get("promotions", [])):
-        ok = (isinstance(promo, dict) and promo.get("provider") in providers
+        ok = (isinstance(promo, dict) and isinstance(promo.get("provider"), str) and promo["provider"] in providers
               and isinstance(promo.get("model"), str)
               and isinstance(promo.get("tiers"), list) and all(t in TIERS for t in promo["tiers"])
               and isinstance(promo.get("until", date.max), date) and not isinstance(promo.get("until"), datetime))
@@ -123,7 +123,7 @@ def load(path: Path | None = None) -> Catalog:
         text = path.read_text()
     except FileNotFoundError:
         data = shipped
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         raise CatalogError(f"{path}: {e}") from None
     else:
         data = _merge(shipped, _parse(text, str(path)))

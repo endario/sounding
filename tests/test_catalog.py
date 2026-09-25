@@ -59,6 +59,11 @@ class Catalog(unittest.TestCase):
         # A banned model still has a maker: independence is not the ban's business.
         self.assertEqual(c.provider_of("opencode-go/muse-spark-1.3-contributor"), "meta")
 
+    def test_a_local_file_that_is_not_utf8_refuses(self):
+        self.local.write_text("schema = 1\n", encoding="utf-16")
+        with self.assertRaises(catalog.CatalogError):
+            catalog.load(self.local)
+
     def test_a_promoted_model_belongs_to_its_provider(self):
         self.assertEqual(self.load().provider_of("opencode-go/space-bunny-free"), "stealth")
         self.assertIsNone(self.load().provider_of("unknown-model"))
@@ -69,7 +74,8 @@ class Catalog(unittest.TestCase):
                      'schema = 1\n[[promotions]]\nprovider = "stealth"\nmodel = "m"\ntiers = ["huge"]\n',
                      'schema = 1\nbanned = "opencode-go/muse-spark-1.3-contributor"\n', "schema = 1\nproviders = 5\n",
                      'schema = 1\n[providers]\ncodex = "x"\n',
-                     'schema = 1\n[providers.meta]\nstandard = "sonnet"\n'):
+                     'schema = 1\n[providers.meta]\nstandard = "sonnet"\n',
+                     'schema = 1\n[[promotions]]\nprovider = ["stealth"]\nmodel = "m"\ntiers = ["standard"]\n'):
             with self.subTest(text=text), self.assertRaises(catalog.CatalogError):
                 self.load(text)
 
