@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,7 +29,8 @@ def dedupe(keys: list[str | None]) -> list[Credential]:
 
 def env_value(path: Path, var: str) -> str | None:
     """`var` as a shell sourcing `path` would leave it: the last assignment wins, a quoted value is
-    taken whole, and an unquoted one ends at a ` #` comment. None when unset, empty or unreadable."""
+    taken whole, and an unquoted one ends at a comment.
+    None when unset, empty or unreadable."""
     found = None
     try:
         lines = path.read_text().splitlines()
@@ -42,7 +44,7 @@ def env_value(path: Path, var: str) -> str | None:
         if v[:1] in ("'", '"') and v[0] in v[1:]:
             v = v[1:v.index(v[0], 1)]
         else:
-            v = v.split(" #", 1)[0].strip()
+            v = re.split(r"\s#", v, maxsplit=1)[0].strip()
         found = v or None
     return found
 

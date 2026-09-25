@@ -535,7 +535,7 @@ class EnvFiles(Base):
 
     def test_a_value_reads_as_a_shell_sourcing_the_file_would_leave_it(self):
         cases = {'K=plain\n': "plain", 'export K="quoted # kept"\n': "quoted # kept",
-                 "K='single'  # note\n": "single", "K=bare # note\n": "bare",
+                 "K='single'  # note\n": "single", "K=bare # note\n": "bare", "K=tab\t# note\n": "tab",
                  "K=first\nK=second\n": "second", "K=\n": None, "OTHER=x\n": None}
         for text, want in cases.items():
             self.assertEqual(env_value(self.env(text), "K"), want, text)
