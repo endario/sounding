@@ -60,7 +60,6 @@ def limits(body: dict) -> list[dict]:
     sub = body.get("subscription") if isinstance(body.get("subscription"), dict) else {}
     included, used = _num(sub.get("kwh_included")), _num(sub.get("kwh_used"))
     if included:
-        # An annual plan's allowance resets every 30 days, not at its period's end.
         annual = sub.get("billing_interval") == "year"
         out.append(limit("month", window_minutes=43200,
                          used_at_least=used / included if used is not None else None,
