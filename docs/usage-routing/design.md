@@ -27,12 +27,25 @@ verdict as their input anyway.
 
 ### Contract
 
+The unit judged is a **candidate: a model on an account for a duration**, not an account alone. An
+account can have limits that apply to one model only (Claude's weekly Opus or Fable limit, carried
+as `role: weekly_model` with a `scope`); an exhausted Opus week must not exclude Sonnet work on the
+same account.
+
 A pure module, `unlimited.verdict`, over schema-1 readings (what `unlimited read` returns):
 
-    verdict(reading, *, now, work, starts=None) -> Verdict
+    verdict(reading, *, model_scope, now, work, starts=None, max_age) -> Verdict
     order(entries, *, verdict_of, then, unread) -> list
 
-`work` is the expected duration of the unit; `starts` defaults to `now`.
+- `model_scope` names the model family the work runs (`None` for a vendor with no model-scoped
+  limits). A limit applies when it has no `scope`, or its `scope` matches; the rest are ignored.
+- `work` is the expected duration; `starts` defaults to `now`.
+- `max_age`: a reading older than this is `unread`. The caller supplies it (the runner uses 300 s);
+  an `unread` candidate is never launched on usage grounds, and the caller falls back to its own
+  order, as both do today.
+
+A CLI, `unlimited verdict --model-scope S --work SECONDS --max-age SECONDS --json`, prints one
+verdict per account of the vendors asked, for the runner.
 
 A `Verdict` is one of:
 
@@ -53,16 +66,24 @@ Rules carried from doc 117 (`spending.verdict`), where they are already tested:
 
 - Every live window constrains feasibility, whatever its length.
 - A window that resets before the work starts constrains nothing.
-- Only the vendor's own stop signal (`held` with a stop basis) excludes by itself; a threshold hold
-  does not.
+- Only the vendor's own stop signal excludes by itself; a threshold hold does not. unlimited's
+  adapters word `held_why` differently (`limit_reached`, `exceeded`, `rate-limited`, `blocked`,
+  `overage`, a lock reason); Phase 1 adds one normalised field on the limit saying whether a hold is
+  the vendor stopping the account.
 - unlimited's projection is used where it has one; otherwise the pace so far, floored while a
   window has only just opened.
 
-The one rule that changes: **the scored window is the plan's monthly bucket where it enforces one,
+**Intended behaviour changes**, each with its own test, and none other:
+
+- For 2mw2lt: **the scored window is the plan's monthly bucket where it enforces one,
 else its weekly window** (owner, 2026-09-25; already the runner's rule, #160). Doc 117 capped the
 scored window at a week because a week's quota expires first; the monthly bucket is scored instead
 because it is the budget a plan runs out of, and the week still excludes the account when it would
 run out during the work.
+- For the runner: a window at 90% no longer excludes by itself; it excludes when it would run out
+  during the work (doc 117's rule: a 95% window that resets before the work ends is the best account
+  there is). And a threshold hold no longer excludes; only a vendor stop does.
+- For both: model-scoped limits apply only to their model.
 
 `order` ranks tier 0 before tier 1 and higher scores first; near ties (within 0.1 of the best still
 standing) go to the caller's `then`. The runner's `then` is the catalog's `tie_preference`; 2mw2lt's
@@ -76,19 +97,25 @@ says so. A reset during the work is covered by the runs-out check against `start
 
 ### Proof
 
-Both consumers' existing routing fixtures (`agent-runner/balance_test.py`, the hermetic suite's
-balancing cases, `steering/test/spending_test.py`) are replayed through the new module, adapted to
-schema-1 readings. Every decision must match today's except where the monthly-bucket rule changes it,
-and each such change is listed. Only then does either consumer switch.
+First fixture: one account whose model-scoped weekly limit is used up while another model on it is
+still usable. Then both consumers' existing routing fixtures (`agent-runner/balance_test.py`, the
+hermetic suite's balancing cases, `steering/test/spending_test.py`) are replayed through the new
+module, adapted to schema-1 readings, pinned at their current commits. Every decision must match
+today's except the intended changes above. Only then does either consumer switch, and each keeps
+its own evaluator until its switch has shipped and held.
 
 ### Consumers
 
 - The runner: `balance.py` becomes a caller of `unlimited verdict` (a CLI over the module); it keeps
   candidate order, account homes and the tie keys.
-- 2mw2lt: `spending.verdict` and `order` become imports from unlimited; its wire readings carry the
-  same fields under other names (`used` for `used_at_least`, `asked`), mapped at the boundary.
+- 2mw2lt: `spending.verdict` and `order` become imports from unlimited. Its wire mapping
+  (`accounts.wire`) renames fields (`used` for `used_at_least`, `asked`, `basis`) and today drops
+  `role` and `scope`; it has to carry them, and the stop field, before the switch.
+- The runner's "best account stands for the provider" stays in `balance.py`, on top of `order`.
+- Versions: the module is additive in an unlimited release; each consumer adopts it in its own
+  change, pinned to that release.
 
-## Phase 2: model choice (sketch)
+## Phase 2: model choice (research, not committed)
 
 Each allow-listed model has an ability `θ_m` (prior: the Artificial Analysis Intelligence Index,
 z-scored), a blended token price in dollars for our traffic (cache hit rate and output ratio measured
@@ -104,17 +131,16 @@ multiplier of the best Phase-1-eligible account that runs it. A promotion is pri
 still bound by its capacity. The choice is the cheapest model whose `p` meets the required
 confidence; expected retries are charged only where a failed task is retried.
 
-## Phase 3: learning (sketch)
+## Phase 3: learning (research, not committed)
 
-Log every decision with its inputs and outcome. Evaluate the Phase 2 policy offline against that log
-before any learned parameter steers routing. Outcome signals: whether the author acted on a finding,
+Log every decision with a defined field list and retention rule (no task or repository content
+without a decision to include it), and the probability with which each choice was made, so that
+another policy can be evaluated counterfactually. A deterministic policy's log says nothing about the
+choices it never made; evaluation needs exploration with known probabilities. Outcome signals: whether the author acted on a finding,
 whether the next round reversed it, whether the run completed. A judge model grading sampled reviews
 is opt-in, and only a model already permitted to review the repository may see it.
 
 ## Open questions
 
-1. Phase 1: whether the runner's per-provider "best account stands for the provider" and 2mw2lt's
-   per-account ranking can share one `order`, or the runner keeps a reduction on top.
-2. Phase 1: the freshness bound: the runner uses 300 s; 2mw2lt's is its own.
-3. Phase 2: the calibration constants (IRT slope, index-to-θ mapping, the λ curve's shape, required
+1. Phase 2: the calibration constants (IRT slope, index-to-θ mapping, the λ curve's shape, required
    confidence per round kind), set by hand from a worked example first.
