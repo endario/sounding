@@ -132,12 +132,17 @@ def _choose(a) -> int:
     now = datetime.now(timezone.utc)
     try:
         cat = catalog.load()
-        quota = {p: float(r) for p, _, r in (x.partition("=") for x in a.quota.split(",") if "=" in x)}
+        quota = {}
+        for x in (x for x in a.quota.split(",") if x):
+            p, eq, r = x.partition("=")
+            if not eq:
+                raise ValueError(f"--quota {x!r}: expected <provider>=<projected use>")
+            quota[p] = float(r)
     except (catalog.CatalogError, ValueError) as e:
         print(f"unlimited: {e}", file=sys.stderr)
         return 2
     outcomes.compact(now)
-    got = choice.choose(cat, tier=a.tier, kind=a.kind, mode=a.mode, providers=[p for p in a.candidates.split(",") if p],
+    got = choice.choose(cat, tier=a.tier, kind=a.kind, mode=a.mode, providers=list(dict.fromkeys(p for p in a.candidates.split(",") if p)),
                         quota=quota, deadline=a.deadline, now=now)
     if got is None:
         print(f"unlimited: no candidate has a model at {a.tier}", file=sys.stderr)

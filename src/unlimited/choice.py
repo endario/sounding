@@ -84,8 +84,10 @@ def choose(cat: Catalog, *, tier: str, kind: str, mode: str | None, providers: l
     records, _ = outcomes.read(log)
     scored = score(cands, quota, outcomes.stats(outcomes.attempts(records, now), now), deadline,
                    cat.tie_preference)
-    i = pick(scored, kind, rng or random.Random())
+    seed = random.randrange(1 << 32)  # logged: a sampled pick can be replayed
+    i = pick(scored, kind, rng or random.Random(seed))
     decision = {"type": "decision", "decision": uuid.uuid4().hex[:16], "at": now.isoformat(), "tier": tier,
-                "kind": kind, "mode": mode, "deadline": deadline, "candidates": scored, "pick": i}
+                "kind": kind, "mode": mode, "deadline": deadline, "seed": None if rng else seed,
+                "candidates": scored, "pick": i}
     outcomes.append(decision, log)
     return decision
