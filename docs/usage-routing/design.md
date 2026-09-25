@@ -1,121 +1,120 @@
 # Usage routing
 
-Issue #92. One model for where a unit of work should run, owned by unlimited and used by the agent
-runner (`balance.py`) and 2mw2lt (`steering/spending.py`, doc 117), replacing both.
+Issue #92. Where the next unit of work should run, owned by unlimited and used by the agent runner
+(`agent-runner/balance.py`) and 2mw2lt (`steering/spending.py`, doc 117). Built in three phases;
+each ships and is judged before the next starts.
 
-Status: draft for critique. Nothing here is built.
+1. **Account verdicts.** Whether an account can take a unit of work, and how well spent its quota
+   would be. Deterministic. Replaces the two consumers' duplicated logic.
+2. **Model choice.** Which model, priced by the accounts that can run it, for a task of continuous
+   difficulty. Deterministic, no learned state.
+3. **Learning.** Record decisions and outcomes; evaluate offline; only then let a learned model
+   steer.
 
-## The question
+The model catalog (`catalog.toml`) keeps saying what can run; readings keep reporting account
+facts; consumers keep their hard constraints (host, maker independence, complement-of, machine
+availability, failover).
 
-Given a task and the models on the allow-list, which model (and which budget pool behind it)
-spends the next unit of usage best? "Best" trades three things off: how likely the model is to do
-the task well, what it really costs, and how long it takes. Today that is two ad-hoc heuristics,
-a binary standard/heavy tier, and a tie rule.
+## Phase 1: account verdicts
 
-## 1. Models
+### Why first
 
-Each allow-listed model `m` carries:
+Both consumers already decide, per account, whether it can take work and which account's quota is
+best spent, and they disagree: on the same OpenCode Go reading the runner scores the month and 2mw2lt
+the week; the runner prefers by name within a tie, 2mw2lt by the caller's key. Every new vendor
+(Command Code) or rule (the monthly bucket) has had to be made twice. Phases 2 and 3 need this
+verdict as their input anyway.
 
-- **Ability `θ_m`**: a latent skill on one scale. Prior: the Artificial Analysis Intelligence Index,
-  z-scored across the allow-list. Its sub-indices (coding, agentic, terminal) can replace it later
-  without changing anything below.
-- **Token price `c_m`**: blended for our traffic, not list price:
-  `c_m = c_in·(1−h) + c_cache·h + c_out·r`, with cache hit rate `h` and output ratio `r` measured
-  from our own runs per task class.
-- **Speed `v_m`**: output tokens per second, and time to first token. Prior: Artificial Analysis's
-  published output speed. Posterior: our own runs (tokens and wall time are already recorded per
-  run), since our endpoints (OpenCode Go, Command Code) are not the ones measured.
+### Contract
 
-## 2. Tasks
+A pure module, `unlimited.verdict`, over schema-1 readings (what `unlimited read` returns):
 
-Each task `t` carries:
+    verdict(reading, *, now, work, starts=None) -> Verdict
+    order(entries, *, verdict_of, then, unread) -> list
 
-- **Difficulty `b_t`** on the same scale as `θ`. It is continuous, and replaces standard/heavy.
-  First estimate: a linear score over features consumers already have (diff size, files touched,
-  new mechanism or security surface, critic vs review, finding vs final round). Learned from
-  outcomes later (section 5).
-- **Size `L_t`**: expected tokens, from the same features.
-- **Required confidence `p*_t`**: the probability of a good outcome the task must reach. Set per
-  round kind (a finding round lower, a final round higher).
-- **Latency weight `κ_t`**: the cost of waiting. Zero for work that is not time-sensitive.
+`work` is the expected duration of the unit; `starts` defaults to `now`.
 
-## 3. Success
+A `Verdict` is one of:
 
-Item response theory puts a model and a task on one scale:
+- `unread`, with a reason: no reading, not ok, stale, malformed, or a window the vendor must report
+  is missing.
+- `excluded`, with the window that binds and when the exclusion lifts: the vendor says it stopped
+  the account (held with a stop basis), a window is used up, or a window is projected to run out
+  before `starts + work`.
+- `ranked`, with a tier and a score. Tier 0: no window projected past its limit. Tier 1: one is,
+  but after the work ends; scored by the time until the first such window runs out. Within tier 0,
+  the score is how much of the scored window's quota would otherwise expire, per unit of time left:
+  `(1 − projected_at_reset) / fraction_of_window_left`.
 
-    p(m, t) = σ(a · (θ_m − b_t))
+The verdict names every window that bound it, so a caller can say why. It is bound to one account
+(the reading's), so whoever launches the work launches that account.
 
-The curve is flat at the top: on an easy task, more ability buys almost nothing, which is why a
-heavy model on an easy task is waste.
+Rules carried from doc 117 (`spending.verdict`), where they are already tested:
 
-## 4. Budget pools and their shadow prices
+- Every live window constrains feasibility, whatever its length.
+- A window that resets before the work starts constrains nothing.
+- Only the vendor's own stop signal (`held` with a stop basis) excludes by itself; a threshold hold
+  does not.
+- unlimited's projection is used where it has one; otherwise the pace so far, floored while a
+  window has only just opened.
 
-A pool `w` is what a run spends: a subscription window, a credit balance, a promotion. Each has a
-shadow price `λ_w` per unit, from unlimited's own forecast `ρ_w` of the fraction used at reset:
+The one rule that changes: **the scored window is the plan's monthly bucket where it enforces one,
+else its weekly window** (owner, 2026-09-25; already the runner's rule, #160). Doc 117 capped the
+scored window at a week because a week's quota expires first; the monthly bucket is scored instead
+because it is the budget a plan runs out of, and the week still excludes the account when it would
+run out during the work.
 
-    λ_w = λ_max · (e^{k·ρ_w} − 1) / (e^k − 1)
+`order` ranks tier 0 before tier 1 and higher scores first; near ties (within 0.1 of the best still
+standing) go to the caller's `then`. The runner's `then` is the catalog's `tie_preference`; 2mw2lt's
+is its existing keys (DeepSeek, Grok, rotation, load).
 
-Quota projected to expire unused (`ρ ≪ 1`) is nearly free; a pool approaching its cap costs
-towards `λ_max`, the pay-as-you-go price of the same work. A pay-as-you-go pool's `λ` is its
-price; a live promotion's is zero. The exponential form is the standard one for online allocation
-against budgets (Buchbinder and Naor), and `k` sets how early a pool starts to look expensive.
+### Stale readings and concurrency
 
-A model's effective price is its cheapest pool that can serve it:
+A reading older than the caller's freshness bound is `unread`, never ranked. Two callers choosing at
+once against the same account each see the same reading; this phase does not reserve capacity, and
+says so. A reset during the work is covered by the runs-out check against `starts + work`.
 
-    π_m = min over pools w serving m of  λ_w · c_m
+### Proof
 
-## 5. The choice
+Both consumers' existing routing fixtures (`agent-runner/balance_test.py`, the hermetic suite's
+balancing cases, `steering/test/spending_test.py`) are replayed through the new module, adapted to
+schema-1 readings. Every decision must match today's except where the monthly-bucket rule changes it,
+and each such change is listed. Only then does either consumer switch.
 
-Among models the consumer allows (host, maker independence, complement-of stay hard
-constraints), take the cheapest in expected cost that is good enough:
+### Consumers
 
-    m* = argmin over m with p(m,t) ≥ p*_t of   π_m · L_t / p(m,t)  +  κ_t · L_t / v_m
+- The runner: `balance.py` becomes a caller of `unlimited verdict` (a CLI over the module); it keeps
+  candidate order, account homes and the tie keys.
+- 2mw2lt: `spending.verdict` and `order` become imports from unlimited; its wire readings carry the
+  same fields under other names (`used` for `used_at_least`, `asked`), mapped at the boundary.
 
-`/p` charges for retries: a cheap model that fails half the time costs twice. If no model reaches
-`p*_t`, take the most likely one.
+## Phase 2: model choice (sketch)
 
-Consequences, not rules:
+Each allow-listed model has an ability `θ_m` (prior: the Artificial Analysis Intelligence Index,
+z-scored), a blended token price in dollars for our traffic (cache hit rate and output ratio measured
+from our runs), and a speed (prior: Artificial Analysis output speed; corrected from our own run
+times, since our endpoints are not the ones measured). A task has a continuous difficulty `b_t`, an
+expected size, a required confidence per round kind, and a latency weight. Success is modelled as
+`p = σ(a·(θ_m − b_t))`.
 
-- **Pareto front.** A model dominated on (price, ability, speed) is never chosen; the front is
-  the set some task can select, and is computed only for display.
-- **Load balancing.** As a pool fills, its `λ` rises and work moves elsewhere. The runner's tie
-  preference and 2mw2lt's tier split both disappear into price.
-- **Overkill.** An easy task reaches `p*` on a cheap model, so the heavy one loses on price.
+An account's price multiplier is the sum, over every window the work draws on, of that window's
+expiring-quota price `λ_w(ρ_w)`: near zero when the quota would expire unused, rising steeply
+towards the pay-as-you-go price as it nears its cap. A model's cost is its dollar price times the
+multiplier of the best Phase-1-eligible account that runs it. A promotion is priced at zero but
+still bound by its capacity. The choice is the cheapest model whose `p` meets the required
+confidence; expected retries are charged only where a failed task is retried.
 
-## 6. Learning from outcomes
+## Phase 3: learning (sketch)
 
-`θ_m`, per-class offsets on `b_t`, speeds and token counts are uncertain, and are updated from
-outcomes. Selection uses Thompson sampling (choose on a draw from the posterior, not its mean), so
-new and stealth models are explored while they are cheap.
-
-The outcome of a review is a noisy reward from two sources:
-
-- **Behaviour** (free, every run): the author acted on a finding (a later commit touches the cited
-  lines), the next round did not reverse it, the run did not time out or fail.
-- **A judge** (paid, sampled): a model from a maker other than the reviewer's grades a sample of
-  reviews against the diff with a fixed rubric, preferring pairwise comparisons of two reviews of
-  the same diff to absolute scores. Its reliability is itself estimated against the behavioural
-  signal, and its reward is weighted by that reliability.
-
-## 7. Interface
-
-unlimited owns the allow-list, prices, priors, pools and the posterior:
-
-    choose(task_features, constraints, now) -> [(model, pool, p, expected_cost, why)]
-    record(run_outcome)
-
-and a CLI for the runner. Consumers supply task features and constraints and report outcomes.
+Log every decision with its inputs and outcome. Evaluate the Phase 2 policy offline against that log
+before any learned parameter steers routing. Outcome signals: whether the author acted on a finding,
+whether the next round reversed it, whether the run completed. A judge model grading sampled reviews
+is opt-in, and only a model already permitted to review the repository may see it.
 
 ## Open questions
 
-1. The calibration constants: the IRT slope `a`, the mapping from index points to `θ`, `k` and
-   `λ_max`, `p*` per round kind. Proposed: set by hand from a worked example, then learned.
-2. Whether a subscription's forecast is good enough for `λ` early in a window, where there is little
-   history (2mw2lt's doc 117 floors the pace for the same reason).
-3. Doc 117 excludes an account only on the vendor's own stop signal and caps scoring at a week.
-   Here a stopped pool simply has no capacity, and every window's `λ` counts; the cheapest serving
-   pool wins. Whether any of doc 117's reasoning is lost needs checking against its cases.
-4. Where the posterior lives (unlimited's cache directory, per machine) and whether machines share
-   it.
-5. The judge's cost: what fraction of reviews to sample, and whether a cheap judge is reliable
-   enough for rubric checks.
+1. Phase 1: whether the runner's per-provider "best account stands for the provider" and 2mw2lt's
+   per-account ranking can share one `order`, or the runner keeps a reduction on top.
+2. Phase 1: the freshness bound: the runner uses 300 s; 2mw2lt's is its own.
+3. Phase 2: the calibration constants (IRT slope, index-to-θ mapping, the λ curve's shape, required
+   confidence per round kind), set by hand from a worked example first.
