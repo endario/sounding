@@ -25,95 +25,95 @@ the week; the runner prefers by name within a tie, 2mw2lt by the caller's key. E
 (Command Code) or rule (the monthly bucket) has had to be made twice. Phases 2 and 3 need this
 verdict as their input anyway.
 
-### Contract
+### Contract (verdict only)
 
-The unit judged is a **candidate: a model on an account for a duration**, not an account alone. An
-account can have limits that apply to one model only (Claude's weekly Opus or Fable limit, carried
-as `role: weekly_model` with a `scope`); an exhausted Opus week must not exclude Sonnet work on the
-same account.
+Phase 1 shares the **per-window evaluation**, not the ordering. Each consumer keeps its own
+ordering, tie rule, fallback and account-level display: the runner's tie is an absolute score gap
+and 2mw2lt's a relative one, and choosing one for both is a separate decision.
 
-A pure module, `unlimited.verdict`, over schema-1 readings (what `unlimited read` returns):
+The unit judged is a **candidate: a model on an account for a duration**. A pure module,
+`unlimited.verdict`, over schema-1 readings:
 
     verdict(reading, *, model_scope, now, work, starts=None, max_age) -> Verdict
-    order(entries, *, verdict_of, then, unread) -> list
 
-- `model_scope` names the model family the work runs (`None` for a vendor with no model-scoped
-  limits). A limit applies when it has no `scope`, or its `scope` matches; the rest are ignored.
-- `work` is the expected duration; `starts` defaults to `now`.
-- `max_age`: a reading older than this is `unread`. The caller supplies it (the runner uses 300 s);
-  an `unread` candidate is never launched on usage grounds, and the caller falls back to its own
-  order, as both do today.
+Which limits apply:
+
+- A limit with `role` `session`, `weekly` or `month` applies to all work on the account.
+- A limit with `role` `weekly_model` applies only when its `scope` matches `model_scope` (an
+  exhausted Opus week does not exclude Sonnet work).
+- A limit with `role` `extra` applies (its `scope` names a pool, not a model: `gpt-reserve`, `key`).
+- A limit with `role` `null` (Anthropic's severity entries, which repeat other windows) does not.
+- A reading from before roles existed, or one whose wire dropped them, applies every limit: an
+  absent role is never read as "no model-specific limit".
+
+`work` is the expected duration; `starts` defaults to `now`; a reading older than `max_age` is
+`unread`.
+
+A `Verdict` is facts plus a classification, all of which a consumer may use or ignore:
+
+- `state`: `unread` (with the reason: none, not ok, stale, malformed, an expected window missing),
+  `excluded` (the binding window and when it lifts: the vendor stopped the account, a window is
+  used up, or one runs out before `starts + work`), or `ranked`.
+- For `ranked`: `tier` (0: no window projected past its limit; 1: one is, but after the work), the
+  scored window, its projected use at reset, its runway, and doc 117's expiring-quota score
+  `(1 − projected_at_reset) / fraction_of_window_left`.
+- Every window that bound it, by name.
+
+`ranked` is advisory: it describes one snapshot and reserves nothing. A consumer launches the
+account the verdict names, and keeps that identity through launch and retry.
+
+The vendor-stop rule needs one normalised field: unlimited's adapters word `held_why` differently
+(`limit_reached`, `exceeded`, `rate-limited`, `blocked`, `overage`, a lock reason), so Phase 1 adds a
+`stopped` flag on the limit, set by each adapter. A cached reading written before the flag existed
+is read through the same word table.
 
 A CLI, `unlimited verdict --model-scope S --work SECONDS --max-age SECONDS --json`, prints one
 verdict per account of the vendors asked, for the runner.
 
-A `Verdict` is one of:
-
-- `unread`, with a reason: no reading, not ok, stale, malformed, or a window the vendor must report
-  is missing.
-- `excluded`, with the window that binds and when the exclusion lifts: the vendor says it stopped
-  the account (held with a stop basis), a window is used up, or a window is projected to run out
-  before `starts + work`.
-- `ranked`, with a tier and a score. Tier 0: no window projected past its limit. Tier 1: one is,
-  but after the work ends; scored by the time until the first such window runs out. Within tier 0,
-  the score is how much of the scored window's quota would otherwise expire, per unit of time left:
-  `(1 − projected_at_reset) / fraction_of_window_left`.
-
-The verdict names every window that bound it, so a caller can say why. It is bound to one account
-(the reading's), so whoever launches the work launches that account.
-
 Rules carried from doc 117 (`spending.verdict`), where they are already tested:
 
-- Every live window constrains feasibility, whatever its length.
+- Every applicable live window constrains feasibility, whatever its length.
 - A window that resets before the work starts constrains nothing.
-- Only the vendor's own stop signal excludes by itself; a threshold hold does not. unlimited's
-  adapters word `held_why` differently (`limit_reached`, `exceeded`, `rate-limited`, `blocked`,
-  `overage`, a lock reason); Phase 1 adds one normalised field on the limit saying whether a hold is
-  the vendor stopping the account.
+- Only a vendor stop excludes by itself; a threshold hold does not.
 - unlimited's projection is used where it has one; otherwise the pace so far, floored while a
   window has only just opened.
 
-**Intended behaviour changes**, each with its own test, and none other:
+The one intended change to that evaluation: **the scored window is the plan's monthly bucket where
+it enforces one, else its weekly window** (owner, 2026-09-25; the runner's rule since #160). The
+week still excludes the account when it would run out during the work.
 
-- For 2mw2lt: **the scored window is the plan's monthly bucket where it enforces one,
-else its weekly window** (owner, 2026-09-25; already the runner's rule, #160). Doc 117 capped the
-scored window at a week because a week's quota expires first; the monthly bucket is scored instead
-because it is the budget a plan runs out of, and the week still excludes the account when it would
-run out during the work.
-- For the runner: a window at 90% no longer excludes by itself; it excludes when it would run out
-  during the work (doc 117's rule: a 95% window that resets before the work ends is the best account
-  there is). And a threshold hold no longer excludes; only a vendor stop does.
-- For both: model-scoped limits apply only to their model.
+### What each consumer's switch changes
 
-`order` ranks tier 0 before tier 1 and higher scores first; near ties (within 0.1 of the best still
-standing) go to the caller's `then`. The runner's `then` is the catalog's `tie_preference`; 2mw2lt's
-is its existing keys (DeepSeek, Grok, rotation, load).
+Each consumer adopts the verdict in its own change, and lists every selection that changes against
+its own fixtures, pinned at the commit it switches from.
 
-### Stale readings and concurrency
-
-A reading older than the caller's freshness bound is `unread`, never ranked. Two callers choosing at
-once against the same account each see the same reading; this phase does not reserve capacity, and
-says so. A reset during the work is covered by the runs-out check against `starts + work`.
+- 2mw2lt keeps `order` and its tie keys; the scored window moves to the month; model-scoped limits
+  apply only to their model. Its wire (`accounts.wire`) must carry `role`, `scope` and `stopped`
+  first. Its published account rows stay an account-level summary until their model-specific
+  meaning is settled.
+- The runner keeps its ranking, its absolute tie gap and "best account stands for the provider", and
+  its fallback when nothing is ranked (tier order, as today; stale, malformed and refused readings
+  all allow it, and the launched account is the tier order's). What it takes from the verdict:
+  exclusion by runs-out-during-work instead of the 90% cut, only vendor stops excluding, and
+  model-scoped limits. Whether it also takes doc 117's score in place of its projected-use score is
+  a separate change, with its own list.
 
 ### Proof
 
-First fixture: one account whose model-scoped weekly limit is used up while another model on it is
-still usable. Then both consumers' existing routing fixtures (`agent-runner/balance_test.py`, the
-hermetic suite's balancing cases, `steering/test/spending_test.py`) are replayed through the new
-module, adapted to schema-1 readings, pinned at their current commits. Every decision must match
-today's except the intended changes above. Only then does either consumer switch, and each keeps
-its own evaluator until its switch has shipped and held.
+First fixture: one account with an exhausted Opus week, a usable Sonnet path, and an `extra` scoped
+limit. Then each consumer's fixtures replayed as above. Each consumer keeps its own evaluator until
+its switch has shipped and held.
 
-### Consumers
+### Concurrency
 
-- The runner: `balance.py` becomes a caller of `unlimited verdict` (a CLI over the module); it keeps
-  candidate order, account homes and the tie keys.
-- 2mw2lt: `spending.verdict` and `order` become imports from unlimited. Its wire mapping
-  (`accounts.wire`) renames fields (`used` for `used_at_least`, `asked`, `basis`) and today drops
-  `role` and `scope`; it has to carry them, and the stop field, before the switch.
-- The runner's "best account stands for the provider" stays in `balance.py`, on top of `order`.
-- Versions: the module is additive in an unlimited release; each consumer adopts it in its own
-  change, pinned to that release.
+Two callers choosing at once see the same reading; nothing is reserved. A reset during the work is
+covered by the runs-out check against `starts + work`.
+
+### Versions
+
+The module ships additively in an unlimited release; the runner checks `unlimited --version` before
+calling the CLI and keeps `balance.py`'s own evaluation when it is older; 2mw2lt pins the release it
+imports.
 
 ## Phase 2: model choice (research, not committed)
 
