@@ -62,10 +62,9 @@ A `Verdict` is facts plus a classification, all of which a consumer may use or i
 `ranked` is advisory: it describes one snapshot and reserves nothing. A consumer launches the
 account the verdict names, and keeps that identity through launch and retry.
 
-The vendor-stop rule needs one normalised field: unlimited's adapters word `held_why` differently
-(`limit_reached`, `exceeded`, `rate-limited`, `blocked`, `overage`, a lock reason), so Phase 1 adds a
-`stopped` flag on the limit, set by each adapter. A cached reading written before the flag existed
-is read through the same word table.
+The vendor-stop rule: a limit unlimited reports as `held` is the vendor's own word, since unlimited
+draws no thresholds of its own. The one exception is Neuralwatt's `overage`, where the account still
+runs and bills. `unlimited.verdict.stopped(limit)` says which, for any reading, cached ones included.
 
 A CLI, `unlimited verdict --model-scope S --work SECONDS --max-age SECONDS --json`, prints one
 verdict per account of the vendors asked, for the runner.
