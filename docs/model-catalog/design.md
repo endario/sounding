@@ -22,8 +22,11 @@ A TOML file. The repo ships `src/unlimited/catalog.toml`; a machine's own
 so an edit takes effect at the next read with no release.
 
 ```toml
+schema = 1
+
 [providers.deepseek]          # the maker: a reviewer never shares one with the author
-harness = "opencode"          # what launches it: codex | claude | grok | glm | kimi | opencode
+harness = "opencode"          # the launcher id the consumer already resolves (the runner's
+                              # resolve_agent_binary names); an account wrapper stays the consumer's
 usage = "opencode"            # the unlimited vendor whose limits it spends
 standard = "opencode-go/deepseek-v4.1-flash"
 
@@ -52,6 +55,10 @@ until = 2026-09-30            # optional; absent means until removed
 
 A provider with no model at a tier cannot run at it (Grok at heavy, stealth outside a promotion).
 
+A consumer validates a run against the catalog: the model it launches under a provider must be one
+the catalog lists for that provider. That replaces the runner's `opencode-go/deepseek-*` guard with
+the same check made from data.
+
 ### Override rule
 
 The local file is merged over the shipped one: a provider's keys replace the shipped provider's keys
@@ -59,6 +66,18 @@ one by one, and a new provider is added. `promotions`, being a hand-curated list
 the local file when it has the key at all, so removing a shipped promotion is deleting it locally.
 A local file that does not parse is an error the consumer sees, never a silent fall-back to the
 shipped copy: a curated list that quietly stops applying is the failure this exists to avoid.
+
+A local file whose `schema` differs from the shipped one is an error, for the same reason.
+
+## Loading
+
+Read at call time, never at import: 2mw2lt's daemon imports `gates` without reading a catalog.
+A broken catalog fails the routing call that asked, loudly. It never falls back to treating a model
+as independent: when the catalog cannot be read, a consumer routes as it did before the catalog
+existed or not at all, never more permissively.
+
+The shipped file is package data, so the wheel must carry it; a test asserts it loads from the
+installed package.
 
 ## Interface
 
@@ -89,9 +108,10 @@ says nothing. Stealth is an ordinary provider: independent of every other, never
 
 1. `trains_on_input`: consumers need a rule. Proposed: a provider with it set is skipped when the
    repo under work is private. Owner to confirm (the alternative is never).
-2. Usage balancing for opencode-harness providers: deepseek, meta and stealth all spend the same Go
-   plan, so the runner's balance reads `usage` to find their shared limit rather than one vendor
-   per provider.
+2. Usage balancing: deepseek, meta and stealth all spend the same Go plan. The runner's `balance.py`
+   picks the limit it scores by provider name today (`scored_limit`, `short_limits`); it moves to
+   keying those on the catalog's `usage` vendor, so any opencode-harness provider scores the Go
+   plan's weekly limit.
 
 ## Testing
 
@@ -101,6 +121,10 @@ catalog.
 
 ## Rollout
 
+Each step is its own PR, and each works before the next exists.
+
 1. unlimited ships the catalog and `unlimited models` (release).
-2. agent-runner reads it: `tier_model` and the deepseek-only guard go.
-3. 2mw2lt reads it: `PROFILE` models and `OPENCODE_MODEL` go; `meta` and `stealth` join reviewers.
+2. agent-runner reads it: `tier_model`, the deepseek-only guard, and `balance.py`'s provider-keyed
+   limit choice go; meta and stealth become routable.
+3. 2mw2lt reads it at call time: `PROFILE` models and `OPENCODE_MODEL` go; `meta` and `stealth`
+   join reviewers.
