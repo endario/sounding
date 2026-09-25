@@ -36,6 +36,11 @@ def _parse(text: str, where: str) -> dict:
         raise CatalogError(f"{where}: {e}") from None
     if got.get("schema") != SCHEMA:
         raise CatalogError(f"{where}: schema {got.get('schema')!r}, expected {SCHEMA}")
+    providers = got.get("providers", {})
+    if not isinstance(providers, dict) or not all(isinstance(p, dict) for p in providers.values()):
+        raise CatalogError(f"{where}: providers must be tables")
+    if not isinstance(got.get("promotions", []), list) or not isinstance(got.get("banned", []), list):
+        raise CatalogError(f"{where}: promotions and banned must be lists")
     return got
 
 
@@ -70,6 +75,16 @@ def _check(c: dict) -> None:
             raise CatalogError(f"promotion {i + 1}: needs a known provider, a model, tiers and an optional date")
     if not all(isinstance(m, str) for m in c.get("banned", [])):
         raise CatalogError("banned: model ids only")
+    owners: dict[str, set] = {}
+    for name, p in providers.items():
+        for t in TIERS:
+            if t in p:
+                owners.setdefault(p[t], set()).add(name)
+    for promo in c.get("promotions", []):
+        owners.setdefault(promo["model"], set()).add(promo["provider"])
+    shared = sorted(m for m, who in owners.items() if len(who) > 1)
+    if shared:
+        raise CatalogError(f"listed under more than one provider: {', '.join(shared)}")
 
 
 class Catalog:

@@ -50,7 +50,7 @@ class Catalog(unittest.TestCase):
         self.assertEqual(live(datetime(2026, 9, 25, 23, 59, tzinfo=timezone.utc)), ["dated", "open"])
         self.assertEqual(live(datetime(2026, 9, 26, 0, 0, tzinfo=timezone.utc)), ["open"])
 
-    def test_a_banned_model_is_never_a_candidate_and_both_ban_lists_count(self):
+    def test_a_banned_model_is_never_a_candidate(self):
         c = self.load('schema = 1\nbanned = ["opencode-go/muse-spark-1.3-contributor", "opencode-go/space-bunny-free"]\n')
         models = [x.model for x in c.candidates("standard", NOW)]
         self.assertNotIn("opencode-go/muse-spark-1.3-contributor", models)
@@ -66,9 +66,42 @@ class Catalog(unittest.TestCase):
     def test_a_broken_or_unversioned_local_file_refuses_rather_than_falling_back(self):
         for text in ("schema = 1\n[providers\n", "[providers.codex]\nstandard = 'x'\n", "schema = 2\n",
                      'schema = 1\n[[promotions]]\nprovider = "nobody"\nmodel = "m"\ntiers = ["standard"]\n',
-                     'schema = 1\n[[promotions]]\nprovider = "stealth"\nmodel = "m"\ntiers = ["huge"]\n'):
+                     'schema = 1\n[[promotions]]\nprovider = "stealth"\nmodel = "m"\ntiers = ["huge"]\n',
+                     'schema = 1\nbanned = "opencode-go/muse-spark-1.3-contributor"\n', "schema = 1\nproviders = 5\n",
+                     'schema = 1\n[providers]\ncodex = "x"\n',
+                     'schema = 1\n[providers.meta]\nstandard = "sonnet"\n'):
             with self.subTest(text=text), self.assertRaises(catalog.CatalogError):
                 self.load(text)
+
+
+class Cli(unittest.TestCase):
+    def run_models(self, *args: str, local: str | None = None) -> tuple[int, str, str]:
+        import io
+        import os
+        from contextlib import redirect_stderr, redirect_stdout
+        from unittest import mock
+
+        from unlimited import cli
+        home = Path(tempfile.mkdtemp())
+        if local is not None:
+            (home / "unlimited").mkdir()
+            (home / "unlimited" / "catalog.toml").write_text(local)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home)}), redirect_stdout(out), redirect_stderr(err):
+            code = cli.main(["models", *args])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_one_providers_model_or_exit_1_when_it_has_none_at_the_tier(self):
+        self.assertEqual(self.run_models("--provider", "codex", "--tier", "heavy")[:2], (0, "gpt-6-sol\n"))
+        self.assertEqual(self.run_models("--provider", "grok", "--tier", "heavy")[:2], (1, ""))
+
+    def test_json_lists_candidates_and_a_broken_catalog_exits_2(self):
+        import json
+        code, out, _ = self.run_models("--tier", "heavy", "--json")
+        self.assertEqual((code, json.loads(out)[0]), (0, {"provider": "codex", "model": "gpt-6-sol", "promoted": False}))
+        code, out, err = self.run_models("--json", local="schema = 2\n")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("catalog", err)
 
 
 if __name__ == "__main__":

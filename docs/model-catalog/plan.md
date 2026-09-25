@@ -7,7 +7,7 @@ Design: [design.md](design.md). One PR per step; each merges and ships before th
 - `src/unlimited/catalog.toml`: schema 1; providers codex, claude, glm, grok, deepseek with today's
   models (from `tier_model`), meta (Muse Spark 1.3 Contributor, standard), stealth (no tier model);
   one promotion, Space Bunny Free, standard, until 2026-09-30; `banned = []`.
-- `src/unlimited/catalog.py`: `load(now, path=None) -> Catalog`, merge, validation errors as
+- `src/unlimited/catalog.py`: `load(path=None) -> Catalog`, merge, validation errors as
   `CatalogError`; `Catalog.candidates(tier, now)`, `Catalog.model(provider, tier)`,
   `Catalog.provider_of(model)`.
 - CLI: `unlimited models [--tier T] [--provider P] [--json]`.

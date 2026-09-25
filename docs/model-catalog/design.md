@@ -78,14 +78,13 @@ A broken catalog fails the routing call that asked, loudly: the run does not sta
 no compiled copy to fall back on, so there is one list, and a broken one is never quietly replaced
 by an older one.
 
-The shipped file is package data, so the wheel must carry it; a test asserts it loads from the
-installed package.
+The shipped file is package data, so the wheel must carry it.
 
 ## Interface
 
-Library (2mw2lt): `unlimited.catalog.load(now) -> Catalog`, with
+Library (2mw2lt): `unlimited.catalog.load() -> Catalog`, with
 `Catalog.providers` (id → harness, usage, per-tier model) and
-`Catalog.candidates(tier, now) -> [(provider, model, promoted)]`: live promotions first, in file
+`Catalog.candidates(tier, now) -> [Candidate]`: live promotions first, in file
 order, then every provider with a model at the tier, in file order; banned models omitted.
 
 CLI (runner): `unlimited models [--tier standard|heavy] --json` prints the same list, plus
@@ -116,7 +115,7 @@ stealth model listed at `heavy` can take a heavy final round, one only at `stand
 
 Banning is by model id, in `banned`: a banned model is never a candidate, as a tier's model or a
 promotion's. There is no per-repo or per-data-policy rule: a model the owner will not
-send work to (Muse Contributor trains on its input) is banned outright.
+send work to is banned outright. A model id is listed under one provider only.
 
 ## Usage balancing
 
