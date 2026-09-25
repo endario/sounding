@@ -39,8 +39,14 @@ towards the pooled prior with `n0 = 3` pseudo-attempts:
 
     μ_c = (n0·μ0 + Σ w_i·log t_i) / (n0 + Σ w_i),   T_ok(c) = exp(μ_c + σ²/2)
 
-`σ²` pooled across all candidates. A failed attempt costs `T_fail(c)`: its observed time to fail,
-decayed-mean, with the round's deadline as its prior (a hang costs the deadline).
+`σ²` pooled across all candidates; `μ0 = log(5 min)` until there is history. A failed attempt
+costs `T_fail(c)`: its observed time to fail, decayed-mean, with this call's deadline as its prior
+(a hang costs whatever the round's deadline is, so the prior is per call, not per candidate).
+
+A decayed EWMA of failures and durations would route much the same with less machinery. The Beta
+prior is kept because it says how much a few attempts should move a model (five attempts' worth),
+where an EWMA's rate is an arbitrary constant, and because 2B's evaluation reads `p` as a
+probability.
 
 **Quota price.** From the verdict's projected use at reset `ρ` (its `at_reset` high end):
 
@@ -53,7 +59,8 @@ An `excluded` verdict removes the candidate, as today; an `unread` one gets `π 
 
     E_c = (1 − p_c)·T_ok(c) + p_c·(T_fail(c) + T_next) + Q·π(ρ_c)
 
-`T_next` is the median `T_ok` of the other candidates: a failure costs the next attempt too.
+`T_next` is the median `T_ok` of the other candidates: a failure costs the next attempt too. So a
+candidate's `E` depends on the set it is in; the log records the whole set.
 
 **Choice.** Final rounds take the lowest `E`. Finding rounds sample with
 `P(c) ∝ exp(−E_c / τ)`, `τ = 2 min`, and every probability is logged, so that 2B can evaluate
@@ -74,7 +81,17 @@ Deepseek takes it; Space Bunny would take it back once it stops hanging for a fe
 ## Logging
 
 One append-only JSON-lines file per machine, `$XDG_STATE_HOME/unlimited/decisions.jsonl`, written
-only by unlimited:
+only by unlimited. This is unlimited's first state of its own, so its contract:
+
+- Each record is one line, appended under an exclusive `flock`. A reader skips a line that does not
+  parse (a torn last line, a hand edit) and says how many it skipped.
+- Each attempt has an id; a second `end` for it is ignored.
+- An attempt start with no end, older than its deadline, is read as a `timeout` (at read time: a
+  runner killed mid-run still counts).
+- Records older than 7 days (14 half-lives: weight below 10⁻⁴) are dropped when the file is
+  compacted, which `choose` does under the lock once the file passes 1 MB.
+
+Records:
 
 - a **decision**: id, time, round kind, tier, host, every candidate with `ρ`, `p`, `T_ok`,
   `T_fail`, `E`, its probability, its exclusion reason if any, and the one chosen;
@@ -82,21 +99,31 @@ only by unlimited:
 - an **attempt end**: outcome (`ok`, `timeout`, `error`, `unavailable`), seconds, tokens where
   the harness reports them.
 
-No repository, diff or prompt content. An attempt start with no end, older than its deadline, is a
-`timeout`: a runner killed mid-run still counts. History is seeded once from the runner's
-`.claude/independent-runs` artifacts on this machine (provider, model, effort, kind, duration,
-`providers_invoked` hops).
+No repository, diff or prompt content. No seeding from the runner's artifacts: that format is the
+runner's, not a contract, and the priors stand in until a day of attempts has accumulated.
 
 ## Interface
 
-- `unlimited choose --tier T --kind finding|final --candidates P,... [--scope P=M] [--usage P=V]
-  [--prefer P,...] [--promotion P=MODEL] [--deadline S] --json` → the decision (above) with its id.
+- `unlimited choose --tier T --kind finding|final --candidates P,... [--scope P=M] [--deadline S]
+  --json` → the decision (above) with its id. Models, usage vendors, promotions and
+  `tie_preference` come from the catalog; the caller names only the providers its own constraints
+  allow (host, maker independence, complement-of).
 - `unlimited attempt start|end ...` records attempts against it.
 - `unlimited outcomes [--json]` prints the per-candidate `p`, `T_ok`, `T_fail` it would use now.
 
-The runner's `balance_candidates` calls `choose` (with `balance.py` as the fallback for an
-older unlimited, as Phase 1 does) and records each attempt around the adviser run, hops included.
-The promotion is passed in as a candidate instead of being tried first. 2mw2lt adopts later.
+The runner's `balance_candidates` calls `choose`, and falls back to `balance.py` on **any** failure
+of it (an older unlimited, a crash, an unwritable log), so 2A never makes routing less available
+than today. It records each attempt around the adviser run, hops included. The promotion is a
+candidate instead of being tried first. 2mw2lt adopts later; until then the two order differently,
+as Phase 1 already accepts.
+
+## Delivery
+
+1. Attempts and the log: `unlimited attempt start|end`, `unlimited outcomes`; the runner records
+   attempts around `balance.py`'s existing choice. No routing change.
+2. `unlimited choose` and the runner's switch to it.
+
+Both ship the same day; the first starts the history the second reads.
 
 ## Proof
 
