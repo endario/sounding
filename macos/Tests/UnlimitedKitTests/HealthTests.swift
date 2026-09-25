@@ -17,7 +17,9 @@ func week(used: Double?, range: [Double]?, elapsed: Double = 3, past: Int = 0, h
 }
 
 @Test func mightRunOutIsAmber() {
-    #expect(week(used: 0.6, range: [0.9, 1.0]).health(now: now) == .amber)
+    #expect(week(used: 0.6, range: [0.9, 1.1]).health(now: now) == .amber)
+    #expect(week(used: 0.6, range: [0.9, 1.0]).health(now: now) == .normal, "under 105% is not yet a warning")
+    #expect(week(used: 0.6, range: [0.9, 1.3]).health(now: now) == .red, "over 125% is red, not amber")
 }
 
 @Test func roomLeftAtResetIsGreen() {
