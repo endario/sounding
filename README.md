@@ -140,8 +140,7 @@ Which model to run is still the consumer's choice.
 
 `unlimited verdict --work SECONDS [--model-scope M] [--max-age S] [--vendor V]... --json` says, for
 each account, whether it can take a unit of work of that length on that model family: `unread`,
-`excluded` (with the window that binds and when it lifts), or `ranked` (with a tier and a score for
-how much quota would otherwise expire). Advisory: it reserves nothing. Design:
+`excluded` (with the window that binds and when it lifts), or `ranked` (with a tier and a score). Advisory: it reserves nothing. Design:
 [docs/usage-routing](docs/usage-routing/design.md).
 
 ## Credits

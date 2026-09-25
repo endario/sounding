@@ -51,12 +51,14 @@ Which limits apply:
 
 A `Verdict` is facts plus a classification, all of which a consumer may use or ignore:
 
-- `state`: `unread` (with the reason: none, not ok, stale, malformed, an expected window missing),
+- `state`: `unread` (with the reason: none, not ok, stale, an expected window missing or malformed;
+  a malformed window the vendor is not expected to report is skipped and named, as doc 117 does),
   `excluded` (the binding window and when it lifts: the vendor stopped the account, a window is
   used up, or one runs out before `starts + work`), or `ranked`.
 - For `ranked`: `tier` (0: no window projected past its limit; 1: one is, but after the work), the
-  scored window, its projected use at reset, its runway, and doc 117's expiring-quota score
-  `(1 − projected_at_reset) / fraction_of_window_left`.
+  scored window, its projected use at reset, and its runway. The `score` is doc 117's: in tier 0
+  the expiring-quota score `(1 − projected_at_reset) / fraction_of_window_left`, in tier 1 the hours
+  until the first window runs out.
 - Every window that bound it, by name.
 
 `ranked` is advisory: it describes one snapshot and reserves nothing. A consumer launches the
@@ -78,7 +80,7 @@ Rules carried from doc 117 (`spending.verdict`), where they are already tested:
   window has only just opened.
 
 The one intended change to that evaluation: **the scored window is the plan's monthly bucket where
-it enforces one, else its weekly window** (owner, 2026-09-25; the runner's rule since #160). The
+it enforces one, else its longest window up to a week** (owner, 2026-09-25; the runner's rule since #160). The
 week still excludes the account when it would run out during the work.
 
 ### What each consumer's switch changes
