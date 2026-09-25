@@ -110,6 +110,12 @@ stealth model listed at `heavy` can take a heavy final round, one only at `stand
 Banning is by model id, in `banned`: a banned model is never a candidate, as a tier's model or a
 promotion's. There is no per-repo or per-data-policy rule.
 
+## Usage balancing
+
+deepseek, meta and stealth all spend the same Go plan. The runner's `balance.py` picks the limit it
+scores by provider name today (`scored_limit`, `short_limits`); it moves to keying those on the
+catalog's `usage` vendor, so any opencode-harness provider scores the Go plan's weekly limit.
+
 ## Testing
 
 unlimited: parse and merge (key-wise provider override, whole-list promotions, a broken local file
