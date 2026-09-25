@@ -395,7 +395,7 @@ class Grok(Base):
         xai.read(Credential("u", self.EXPIRED), NOW + timedelta(hours=6), get)
         self.assertEqual(self.calls[0][0], xai.TOKEN_URL)
 
-    def test_a_refused_refresh_token_asks_for_a_new_login(self):
+    def test_a_refused_refresh_token_reads_as_expired(self):
         got = xai.read(Credential("u", self.EXPIRED), NOW, self.grok(Answer(None, 400, "http-400")))
         self.assertEqual((got["status"], got["why"]), ("unread", "credential-expired"))
         self.assertEqual(len(self.calls), 1)
