@@ -34,7 +34,8 @@ prior Beta(`a0 = 0.5`, `b0 = 4.5`) (a 10% failure rate worth 5 attempts):
 A model that failed twice in the last hour has `p ≈ 0.39`; after a quiet day the decay returns it
 towards the prior on its own. This is the backoff, without a separate ban.
 
-**Duration.** Per (provider, model, effort, kind), log-seconds of successful attempts, shrunk
+**Duration.** Per (provider, model), log-seconds (effort and kind are logged for 2B, not split
+on yet: a day's attempts would spread too thin), of successful attempts, shrunk
 towards the pooled prior with `n0 = 3` pseudo-attempts:
 
     μ_c = (n0·μ0 + Σ w_i·log t_i) / (n0 + Σ w_i),   T_ok(c) = exp(μ_c + σ²/2)
