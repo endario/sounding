@@ -144,3 +144,17 @@ func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
     #expect(t.value == .percent(41))
     #expect(t.alternate == Tile.Alternate(role: "weekly", value: .percent(80), health: .red))
 }
+
+@Test func aPlanWithAMonthlyBucketAndACalmWeekShowsNoOverride() throws {
+    let data = Data("""
+    [{"schema": 1, "vendor": "opencode", "account": "o", "status": "ok", "taken_at": "2026-09-24T05:59:00+00:00",
+      "names": ["opencode"], "limits": [
+       {"name": "seven_day", "window_minutes": 10080, "used_at_least": 0.1, "resets_at": "2026-09-28T09:28:00+00:00",
+        "role": "weekly", "projection": {"at_reset": [0.2, 0.3], "past_windows": 5}},
+       {"name": "month", "window_minutes": 43200, "used_at_least": 0.41, "resets_at": "2026-10-19T05:34:00+00:00",
+        "role": "month", "projection": {"at_reset": [0.9, 1.0], "past_windows": 5}}]}]
+    """.utf8)
+    let t = try #require(Tile.strip(Reading.decode(data), now: now).first)
+    #expect(t.value == .percent(41))
+    #expect(t.alternate == nil)
+}
