@@ -65,7 +65,7 @@ def limits(body: dict, now: datetime) -> list[dict]:
 
 def _token_file() -> Path:
     from ..cache import default_dir
-    return default_dir() / "xai-token.json"
+    return default_dir() / "credentials" / "xai.json"
 
 
 def _held() -> dict:
@@ -96,10 +96,8 @@ def _live(entry: object, now: datetime) -> str | None:
 
 
 def _key(cred: Credential, now: datetime, get) -> str | dict:
-    """A live access token, or the reading that says why there is none. The Grok CLI's token lasts
-    six hours and it renews only when it runs, so an expired one is renewed here from its refresh
-    token and held in this cache, never written to auth.json: the CLI guards that file with a lock
-    of its own. xAI keeps a used refresh token valid, so renewing here never signs the CLI out."""
+    """A live access token, or the reading that says why there is none. A renewed token is held in
+    unlimited's own store; auth.json is the Grok CLI's and is never written."""
     key = _live(cred.secret, now) or _live(_held().get(cred.account), now)
     if key:
         return key
