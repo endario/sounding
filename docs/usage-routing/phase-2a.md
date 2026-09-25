@@ -36,7 +36,7 @@ towards the prior on its own. This is the backoff, without a separate ban.
 
 **Duration.** Per (provider, model), log-seconds (effort and kind are logged for 2B, not split
 on yet: a day's attempts would spread too thin), of successful attempts, shrunk
-towards the pooled prior with `n0 = 3` pseudo-attempts:
+towards a fixed prior with `n0 = 3` pseudo-attempts:
 
     μ_c = (n0·μ0 + Σ w_i·log t_i) / (n0 + Σ w_i),   T_ok(c) = exp(μ_c + σ²/2)
 
@@ -72,10 +72,10 @@ before sampling (an approximate tie, as today, in 2A's units).
 
 | candidate | ρ | π | p | T_ok | T_fail | E |
 |---|---|---|---|---|---|---|
-| stealth (promotion) | – | 0 | 0.45 (4 failed, 1 ok) | 4 | 30 (deadline) | 2.2 + 0.45·(30 + 4) = 17.5 |
+| stealth (promotion) | – | 0 | 0.45 (4 failed, 1 ok) | 4 | 30 (deadline) | 2.2 + 0.45·(30 + 3.6) = 17.3 |
 | glm flash | 0.93 | 0.70 | 0.1 | 3.6 | 5 | 3.2 + 0.1·(5 + 4) + 14 = 18.2 |
 | deepseek flash | 0.4 (month) | 0.05 | 0.1 | 3.5 | 5 | 3.2 + 0.9 + 1 = 5.1 |
-| codex luna | 1.04 | 1.22 | 0.1 | 5 | 5 | 4.5 + 0.9 + 24 = 29 |
+| codex luna | 1.04 | 1.22 | 0.1 | 5 | 5 | 4.5 + 0.1·(5 + 3.6) + 24.4 = 29.8 |
 
 Deepseek takes it; Space Bunny would take it back once it stops hanging for a few hours.
 

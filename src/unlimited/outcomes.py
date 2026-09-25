@@ -120,7 +120,9 @@ def attempts(records: list[dict], now: datetime) -> list[dict]:
         deadline = r.get("deadline") if isinstance(r.get("deadline"), (int, float)) else None
         e = ends.get(r["attempt"])
         t1 = _time(e.get("at")) if e else None
-        if e and t1 is not None and e.get("outcome") in OUTCOMES:
+        if e and (t1 is None or e.get("outcome") not in OUTCOMES):
+            continue  # an end this reader does not understand: not evidence of a timeout
+        if e:
             outcome, secs = e["outcome"], max((t1 - t0).total_seconds(), 0.0)
         elif deadline is not None and now - t0 > timedelta(seconds=deadline):
             outcome, secs = "timeout", float(deadline)
@@ -140,9 +142,14 @@ def stats(done: list[dict], now: datetime) -> dict[tuple[str, str], dict]:
     success `t_ok` (per effort and kind where it has its own history, else the model's) and the
     decayed mean seconds of a failure `t_fail` (None without one), and the weights behind them.
     `unavailable` is not the model's failure and is not counted."""
-    logs = [math.log(max(a["secs"], 1.0)) for a in done if a["outcome"] == "ok"]
-    mu_all = (sum(logs) / len(logs)) if logs else MU0
-    var = (sum((x - mu_all) ** 2 for x in logs) / (len(logs) - 1)) if len(logs) > 1 else 0.25
+    # The spread of log-durations, pooled over every model, weighted as the per-model sums are.
+    oks = [(_weight(a["at"], now), math.log(max(a["secs"], 1.0))) for a in done if a["outcome"] == "ok"]
+    total = sum(w for w, _ in oks)
+    if total > 1:
+        mean = sum(w * x for w, x in oks) / total
+        var = sum(w * (x - mean) ** 2 for w, x in oks) / (total - 1)
+    else:
+        var = 0.25
     out: dict[tuple[str, str], dict] = {}
     for a in done:
         if a["outcome"] == "unavailable":

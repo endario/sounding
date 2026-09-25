@@ -118,7 +118,7 @@ def _outcomes(a) -> int:
     if a.json:
         json.dump([{"provider": p, "model": m, **s} for (p, m), s in sorted(got.items())], sys.stdout)
     else:
-        for (p, m), s in sorted(got.items(), key=lambda e: -e[1]["p"]):
+        for (p, m), s in sorted(got.items()):
             fail = f"{s['t_fail'] / 60:5.1f}m" if s["t_fail"] is not None else "    -"
             print(f"{p:<9} {m:<42} fail {s['p']:4.0%}  ok {s['t_ok'] / 60:5.1f}m  failed {fail}"
                   f"  (ok {s['ok']:.1f}, fail {s['fail']:.1f})")

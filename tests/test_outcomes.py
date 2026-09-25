@@ -65,6 +65,11 @@ class Log(unittest.TestCase):
             self.run_attempt("deepseek", "d", "ok", 2, (10 + i) * MIN)
         self.assertLess(self.stats()[0][("deepseek", "d")]["t_ok"], 200)
 
+    def test_an_end_with_an_unknown_outcome_is_not_read_as_a_timeout(self):
+        aid = self.run_attempt("glm", "g", None, 0, 40 * MIN, deadline=60)
+        outcomes.end(aid, outcome="later-schema", now=NOW - 39 * MIN, p=self.p)
+        self.assertEqual(self.stats()[0], {})
+
     def test_an_unreadable_line_is_skipped_and_counted(self):
         self.run_attempt("glm", "g", "ok", 4, 10 * MIN)
         with open(self.p, "a") as f:
