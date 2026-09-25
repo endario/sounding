@@ -54,8 +54,8 @@ def _duration(text: str) -> timedelta:
         n, unit = float(text[:-1]), units[text[-1]]
     except (ValueError, KeyError, IndexError):
         raise argparse.ArgumentTypeError(f"{text!r}: expected a number and m, h, d or w, e.g. 90m, 1d")
-    if n <= 0:
-        raise argparse.ArgumentTypeError(f"{text!r}: must be positive")
+    if not 0 < n < 1e6:
+        raise argparse.ArgumentTypeError(f"{text!r}: must be positive and finite")
     return timedelta(seconds=n * units[text[-1]])
 
 
