@@ -19,6 +19,9 @@ tie_preference = ["meta", "deepseek"]  # providers preferred among near-equal ca
 provider = "deepseek"                  # its maker
 tiers = ["standard"]                   # the tiers it serves
 
+[presets.spread]                       # a named way of choosing (choose --preset): temperature
+temperature = 2                        # and quota_weight only; a local one replaces it by name
+
 [[offerings]]                          # a vendor's route to a model
 id = "opencode-go/deepseek-v4.1-flash" # the vendor's name for it: unique, what a caller launches
 model = "deepseek-v4-1-flash"

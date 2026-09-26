@@ -213,7 +213,7 @@ def _choose(a) -> int:
         return 2
     try:
         got = choice.choose(cat, tier=a.tier, candidates=list(dict.fromkeys(p for p in a.candidates.split(",") if p)),
-                            quota=quota, deadline=a.deadline, now=now, temperature=a.temperature,
+                            quota=quota, deadline=a.deadline, now=now, temperature=a.temperature, preset=a.preset,
                             quota_weight=a.quota_weight, task=a.task, meta=dict(a.meta or []),
                             exclude=dict(x.partition("=")[::2] for x in a.exclude.split(",") if x),
                             prefer=prefer,
@@ -406,6 +406,9 @@ examples:
   unlimited choose --tier standard --candidates codex,glm,deepseek --deadline 900 \\
       --prefer codex=-5,glm=-5 --json
 
+  # a named way of choosing: near-equal candidates take turns
+  unlimited choose --tier standard --candidates codex,glm,deepseek --deadline 900 --preset spread --json
+
   # explore: near-equal candidates are each tried now and then
   unlimited choose --tier heavy --candidates codex,claude --deadline 1800 --temperature 2 \\
       --task summarise --meta ticket=42 --json
@@ -434,10 +437,15 @@ exit status: 0 decided; 1 no named candidate is live at the tier; 2 bad input.""
                     help="the vendors a use may spend; a route on any other is not a candidate. Default: "
                          "those with an account on this machine; `any` for every vendor, when the caller "
                          "launches elsewhere")
-    ch.add_argument("--temperature", type=float, default=0.0, metavar="MINUTES",
+    ch.add_argument("--preset", metavar="NAME",
+                    help="a named way of choosing from the catalog (`unlimited models --catalog` lists them "
+                         "under presets), setting --temperature and --quota-weight wherever this call does "
+                         "not; e.g. steady (the lowest expected cost) or spread (near-equal candidates take "
+                         "turns)")
+    ch.add_argument("--temperature", type=float, metavar="MINUTES",
                     help="0 (default): cheapest first; above it the order is sampled, a candidate this many "
                          "minutes worse being e times less likely at each draw")
-    ch.add_argument("--quota-weight", type=float, default=20.0, metavar="MINUTES",
+    ch.add_argument("--quota-weight", type=float, metavar="MINUTES",
                     help="minutes one unit of quota price is worth against time (default 20); 0 ignores quota")
     ch.add_argument("--task", metavar="LABEL", help="the caller's label for the task: recorded, never read")
     ch.add_argument("--meta", action="append", type=_meta, metavar="KEY=VALUE", help=META_HELP)
