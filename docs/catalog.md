@@ -59,7 +59,9 @@ its first live offering at each tier.
 Models merge key by key; an offering replaces the shipped offering with the same id, or is added;
 `tiers` and `tie_preference` are replaced whole (a tier the local list drops is served by no shipped
 model); `banned` is the union of both; a card replaces the shipped card of the same vendor, name and
-plan. A local file that does not parse, or states an unknown `schema`, is an error, never ignored.
+plan; a preset replaces the shipped preset of its name whole. A local file that does not parse,
+states an unknown `schema`, or holds a top-level key a schema-2 file does not have, is an error,
+never ignored.
 
 A local `schema = 1` file is still read.
 

@@ -347,7 +347,7 @@ examples:
     m.add_argument("--json", action="store_true", help="a JSON array of {provider, model, promoted}")
     m.add_argument("--catalog", action="store_true",
                    help="the whole merged catalog as JSON: tiers, models, live offerings, cards, and a "
-                        "one-vendor-per-provider view (providers, promotions)")
+                        "one-vendor-per-provider view (providers, promotions), and presets")
     cd = add("cards", "each route's published figures beside its runs here", """\
 For each live route: what its vendor publishes (intelligence score, tokens per second, price per
 million tokens, from the catalog's cards; another vendor's card for the same model is shown as a
@@ -390,7 +390,8 @@ half-life), so a route that just failed twice is avoided and recovers on its own
 Prints the decision as JSON and appends it to the log with the whole request:
   decision (id), request, seed, candidates (each with provider, model = its offering id,
   vendor, rho, pi, debit, p, t_ok, t_fail, preference, e and prob, its odds of coming first),
-  order (candidate indices, the order to try), pick (the first of order) and prefer_unmatched.
+  order (candidate indices, the order to try), pick (the first of order), effective (the
+  temperature and quota weight used), prefer_unmatched and attempts_unknown.
 Pass the decision id to `attempt start --decision` so the log ties the use to the choice.
 Without the log (your own history): unlimited.choice.rank. Details: {DOCS}/choice.md#3-choice""", """\
 examples:
@@ -443,10 +444,10 @@ exit status: 0 decided; 1 no named candidate is live at the tier; 2 bad input.""
                          "not; e.g. steady (the lowest expected cost) or spread (near-equal candidates take "
                          "turns)")
     ch.add_argument("--temperature", type=float, metavar="MINUTES",
-                    help="0 (default): cheapest first; above it the order is sampled, a candidate this many "
+                    help="0 (default, unless --preset sets it): cheapest first; above it the order is sampled, a candidate this many "
                          "minutes worse being e times less likely at each draw")
     ch.add_argument("--quota-weight", type=float, metavar="MINUTES",
-                    help="minutes one unit of quota price is worth against time (default 20); 0 ignores quota")
+                    help="minutes one unit of quota price is worth against time (default 20, unless --preset sets it); 0 ignores quota")
     ch.add_argument("--task", metavar="LABEL", help="the caller's label for the task: recorded, never read")
     ch.add_argument("--meta", action="append", type=_meta, metavar="KEY=VALUE", help=META_HELP)
     ch.add_argument("--json", action="store_true", help="JSON output (the only format; accepted for clarity)")
