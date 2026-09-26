@@ -142,6 +142,12 @@ class Choose(unittest.TestCase):
                                        "--quota", "glm=0.2,codex=0.9", "--deadline", "900", "--json"]), 0)
         got = json.loads(buf.getvalue())
         self.assertEqual(got["candidates"][got["pick"]]["provider"], "glm")
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "XDG_STATE_HOME": state}), redirect_stdout(buf):
+            cli.main(["choose", "--tier", "heavy", "--candidates", "glm,codex", "--quota", "glm=0.2,codex=0.9",
+                      "--exclude", "glm-5.3", "--deadline", "900", "--json"])
+        got = json.loads(buf.getvalue())
+        self.assertEqual([c["provider"] for c in got["candidates"]], ["codex"], "the ruled-out route is no candidate")
 
 
 if __name__ == "__main__":
