@@ -1,0 +1,60 @@
+"""One model, several vendors: offerings in the catalog (docs/catalog.md)."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+
+from unlimited import catalog
+
+NOW = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+SECOND = ('schema = 2\n[[offerings]]\nid = "commandcode/deepseek/deepseek-v4.1-flash"\n'
+          'model = "deepseek-v4-1-flash"\nvendor = "commandcode"\n')
+
+
+def load(text: str, off: list | None = None) -> catalog.Catalog:
+    d = Path(tempfile.mkdtemp())
+    (d / "catalog.toml").write_text(text)
+    if off:
+        catalog.write_switches(off, d / "switches.json")
+    return catalog.load(d / "catalog.toml")
+
+
+class Routes(unittest.TestCase):
+    def test_a_model_sold_by_two_vendors_is_two_routes_of_one_maker(self):
+        c = load(SECOND)
+        ds = [(r["id"], r["vendor"]) for r in c.routes(NOW, "standard") if r["model"] == "deepseek-v4-1-flash"]
+        self.assertEqual(ds, [("opencode-go/deepseek-v4.1-flash", "opencode"),
+                              ("commandcode/deepseek/deepseek-v4.1-flash", "commandcode")])
+        self.assertEqual({c.provider_of(i) for i, _ in ds}, {"deepseek"})
+        self.assertEqual([x.model for x in c.candidates("standard", NOW) if x.provider == "deepseek"],
+                         [i for i, _ in ds], "every route is a candidate, none hidden")
+
+    def test_switching_a_vendor_off_takes_only_its_routes(self):
+        c = load(SECOND, off=[{"target": "commandcode"}])
+        ids = [r["id"] for r in c.routes(NOW, "standard")]
+        self.assertIn("opencode-go/deepseek-v4.1-flash", ids)
+        self.assertFalse([i for i in ids if i.startswith("commandcode/")], ids)
+
+    def test_a_local_offering_replaces_the_shipped_one_with_its_id(self):
+        c = load('schema = 2\n[[offerings]]\nid = "opencode-go/deepseek-v4.1-flash"\n'
+                 'model = "deepseek-v4-1-flash"\nvendor = "opencode"\nuntil = 2026-09-01\n')
+        self.assertNotIn("opencode-go/deepseek-v4.1-flash", [r["id"] for r in c.routes(NOW)])
+
+    def test_an_offering_id_is_one_route_and_its_model_must_exist(self):
+        for text in (SECOND + SECOND.replace("schema = 2\n", ""),
+                     'schema = 2\n[[offerings]]\nid = "x"\nmodel = "no-such-model"\nvendor = "v"\n'):
+            with self.assertRaises(catalog.CatalogError, msg=text):
+                load(text)
+
+    def test_the_schema_1_view_names_one_route_per_provider_and_the_free_ones(self):
+        j = load(SECOND).to_json(NOW)
+        self.assertEqual((j["providers"]["deepseek"]["standard"], j["providers"]["deepseek"]["usage"]),
+                         ("opencode-go/deepseek-v4.1-flash", "opencode"))
+        self.assertEqual(len([o for o in j["offerings"] if o["model"] == "deepseek-v4-1-flash"]), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
