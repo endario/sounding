@@ -56,10 +56,7 @@ Models merge key by key; an offering replaces the shipped offering with the same
 model); `banned` is the union of both; a card replaces the shipped card of the same vendor, name and
 plan. A local file that does not parse, or states an unknown `schema`, is an error, never ignored.
 
-A local `schema = 1` file is read as it always was: each provider's model at a tier becomes a model
-of that provider, named by its id, with one offering of that id on the provider's `usage` vendor
-(the shipped provider's when the file names none), and it displaces the shipped model at that tier;
-its promotions replace the shipped free offerings.
+A local `schema = 1` file is still read.
 
 ## Switches
 

@@ -66,5 +66,28 @@ class Routes(unittest.TestCase):
         view = c.to_json(NOW)["providers"]["codex"]
         self.assertEqual((view["usage"], view.get("heavy")), ("openai", None), view)
 
+    def test_a_schema_1_providers_own_keys_stay_in_the_view(self):
+        c = load('schema = 1\n[providers.codex]\nlauncher = "mine"\n')
+        self.assertEqual(c.to_json(NOW)["providers"]["codex"]["launcher"], "mine")
+
+    def test_model_answers_as_the_view_does(self):
+        c = load('schema = 2\n[[offerings]]\nid = "sol-elsewhere"\nmodel = "gpt-6-sol"\nvendor = "azure"\n'
+                 '[[offerings]]\nid = "gpt-6-sol"\nmodel = "gpt-6-sol"\nvendor = "openai"\nuntil = 2020-01-01\n')
+        self.assertIsNone(c.model("codex", "heavy", NOW))
+        self.assertEqual(c.model("codex", "standard", NOW), c.to_json(NOW)["providers"]["codex"]["standard"])
+
+    def test_a_route_on_another_vendor_is_not_priced_by_the_providers_quota(self):
+        from unlimited import choice
+        c = load(SECOND)
+        got = choice.choose(c, tier="standard", providers=["deepseek"], quota={"deepseek": 0.2}, deadline=600,
+                            now=NOW, log=Path(tempfile.mkdtemp()) / "d.jsonl")
+        rho = {x["model"]: x["rho"] for x in got["candidates"]}
+        self.assertEqual((rho["opencode-go/deepseek-v4.1-flash"], rho["commandcode/deepseek/deepseek-v4.1-flash"]),
+                         (0.2, None))
+
+    def test_an_offering_that_is_not_a_table_is_a_catalog_error(self):
+        with self.assertRaises(catalog.CatalogError):
+            load('schema = 2\nofferings = ["x"]\n')
+
 if __name__ == "__main__":
     unittest.main()

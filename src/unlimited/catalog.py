@@ -81,6 +81,8 @@ def _parse(text: str, where: str) -> dict:
         raise CatalogError(f"{where}: models must be tables")
     if not all(isinstance(got.get(k, []), list) for k in ("tiers", "offerings", "banned", "tie_preference", "cards")):
         raise CatalogError(f"{where}: tiers, offerings, banned, tie_preference and cards must be lists")
+    if not all(isinstance(o, dict) for k in ("offerings", "cards") for o in got.get(k, [])):
+        raise CatalogError(f"{where}: each offering and card is a table")
     return got
 
 
@@ -110,6 +112,9 @@ def _from_schema_1(old: dict, where: str) -> dict:
     replaces = []  # (provider, tier): schema 1's provider key replaced the shipped model there
     # A provider's `usage` alone moved its shipped models to that vendor's account.
     usage = {name: p["usage"] for name, p in providers.items() if isinstance(p.get("usage"), str)}
+    # Keys of the reader's own on a provider table, kept for the `providers` view.
+    extras = {name: {k: v for k, v in p.items() if k != "usage" and k not in (tiers if isinstance(tiers, list) else [])}
+              for name, p in providers.items()}
     for name, p in providers.items():
         for t in tiers if isinstance(tiers, list) else []:
             if t in p:
@@ -123,7 +128,8 @@ def _from_schema_1(old: dict, where: str) -> dict:
             {"free": True, **({"until": promo["until"]} if "until" in promo else {})})
     out = {k: v for k, v in old.items() if k not in ("providers", "promotions")}
     return {**out, "schema": SCHEMA, "models": models, "offerings": offerings,
-            "_replaces": replaces, "_replaces_free": "promotions" in old, "_usage": usage}
+            "_replaces": replaces, "_replaces_free": "promotions" in old, "_usage": usage,
+            "provider_keys": {k: v for k, v in extras.items() if v}}
 
 
 def _merge(shipped: dict, local: dict) -> dict:
@@ -166,6 +172,10 @@ def _merge(shipped: dict, local: dict) -> dict:
         local_offerings.append(o)
     ids = {o.get("id") for o in local_offerings}
     out["offerings"] = [o for o in shipped_offerings if o.get("id") not in ids] + local_offerings
+    keys = {k: dict(v) for k, v in shipped.get("provider_keys", {}).items()}
+    for k, v in local.get("provider_keys", {}).items():
+        keys.setdefault(k, {}).update(v)
+    out["provider_keys"] = keys
     for whole in ("tiers", "tie_preference"):
         if whole in local:
             out[whole] = local[whole]
@@ -229,6 +239,7 @@ class Catalog:
         self.banned: frozenset[str] = frozenset(data.get("banned", []))
         self.tie_preference: list[str] = data.get("tie_preference", [])
         self.cards: list[dict] = data.get("cards", [])
+        self.provider_keys: dict[str, dict] = data.get("provider_keys", {})
         # Switched off on this machine: a provider, model, vendor, offering id or `provider:model`.
         self.off: list[dict] = off or []
 
@@ -282,18 +293,7 @@ class Catalog:
         live = self.routes(now)
         iso = lambda o: dict(o, until=o["until"].isoformat()) if "until" in o else dict(o)
         offerings = [iso(o) for o in self.offerings if any(r["id"] == o["id"] for r in live)]
-        providers: dict[str, dict] = {}
-        for r in live:
-            if r["free"]:
-                continue
-            p = providers.setdefault(r["provider"], {"usage": r["vendor"]})
-            # One vendor per provider in this view: a tier served only on another vendor is left out.
-            for t in r["tiers"]:
-                if t not in p and r["vendor"] == p["usage"]:
-                    p[t] = r["id"]
-        for name in {m["provider"] for m in self.models.values()}:
-            providers.setdefault(name, {"usage": next((o["vendor"] for o in self.offerings
-                                                        if self.models[o["model"]]["provider"] == name), "")})
+        providers = {name: {**self.provider_keys.get(name, {}), **v} for name, v in self._view(live).items()}
         promotions = [{"provider": r["provider"], "model": r["id"], "tiers": r["tiers"],
                        **({"until": o["until"].isoformat()} if "until" in o else {})}
                       for r in live if r["free"] for o in self.offerings if o["id"] == r["id"]]
@@ -302,11 +302,27 @@ class Catalog:
                 "providers": providers, "promotions": promotions,
                 "cards": [dict(c, as_of=c["as_of"].isoformat()) for c in self.cards]}
 
+    def _view(self, live: list[dict]) -> dict[str, dict]:
+        """One vendor per provider, for readers that launch one offering per provider: the vendor of
+        its first live offering, and at each tier its first live offering on that vendor. A tier
+        served only on another vendor is left out rather than paired with the wrong account."""
+        view: dict[str, dict] = {}
+        for r in live:
+            if r["free"]:
+                continue
+            p = view.setdefault(r["provider"], {"usage": r["vendor"]})
+            for t in r["tiers"]:
+                if t not in p and r["vendor"] == p["usage"]:
+                    p[t] = r["id"]
+        for name in {m["provider"] for m in self.models.values()}:
+            view.setdefault(name, {"usage": next((o["vendor"] for o in self.offerings
+                                                   if self.models[o["model"]]["provider"] == name), "")})
+        return view
+
     def model(self, provider: str, tier: str, now: datetime | None = None) -> str | None:
-        """The provider's first live, non-free offering at `tier`: for a reader that launches one
-        offering per provider. `routes` lists them all."""
-        return next((r["id"] for r in self.routes(now or datetime.now(timezone.utc), tier)
-                     if r["provider"] == provider and not r["free"]), None)
+        """The provider's model at `tier` in the one-vendor view (`--catalog`'s `providers`).
+        `routes` lists every route."""
+        return self._view(self.routes(now or datetime.now(timezone.utc))).get(provider, {}).get(tier)
 
     def route(self, oid: str) -> dict | None:
         """The offering with this id, as `routes` gives it, whether live or not."""
