@@ -21,25 +21,24 @@ fields of an offering.
 3. **Callers and data**: the agent runner and 2mw2lt read `routes` and launch by vendor; then the
    shipped catalog adds second offerings (Command Code for DeepSeek Flash and Muse Spark).
 
-4. **What a route spends — measured before it is priced.** Two plans can sell one model and debit
-   their quota differently for it: a caller measured Command Code spending 1.5× (DeepSeek Flash),
-   2.2× (GLM Flash) and 5.4× (Muse Spark) what OpenCode Go did over four runs each, though both
-   publish the same per-token list prices for those models (checked 2026-09-26). So token counts at
-   card prices cannot stand in for it (critic round 1): each plan's own meter can.
+4. **What a route debits.** Two plans can sell one model at the same list price and debit their
+   quota differently for it. A caller measured Command Code spending 1.5× (DeepSeek Flash), 2.2×
+   (GLM Flash) and 5.4× (Muse Spark) the plan share OpenCode Go did, over four runs each; both
+   publish the same per-token prices for those models (2026-09-26). Command Code's meter, read
+   around single runs on this machine, debited 1.2 to 12.9 times list price for one run (two
+   identical 28k-token runs: $0.010 and $0.016), so a per-run measurement is too noisy to learn from
+   yet, and token counts at card prices do not predict it (critic rounds 1 and 2).
 
-   **4a, measure.** unlimited already keeps every reading's windows as samples (`projection`), and
-   the attempt log names the account each attempt ran on. For an attempt with an end and an
-   account, whose account ran nothing else between the last sample before its start and the first
-   after its end, its **use** of each window is the rise in that window's used fraction between
-   those two samples (same reset; a reset in between discards it). `unlimited outcomes` reports, per
-   route, the decayed mean use of each window role and how many attempts it rests on. Use by
-   anything this log does not see (another machine, a person) lands in the same readings and
-   inflates it; that is reported, not corrected. Nothing in `choose` changes.
+   So the catalog states it, as data with its source, the way it states tiers: an offering may carry
+   `debit`, how much of its account one run uses relative to the model's plainest offering (default
+   1). The quota term of that route's expected cost is multiplied by it:
 
-   **4b, price.** Once 4a shows routes' use differing reliably (the three measured models first),
-   the quota term becomes `quota_weight·π(ρ_r)·u_r/ū`, where `u_r` is the route's measured use of
-   the window its `ρ` is projected on and `ū` the median over candidates that have one (`u/ū = 1`
-   with no measurement, and when `ū` is 0). Its design is settled on 4a's data, not now.
+       E = … + quota_weight·debit_r·π(ρ_r) − preference
+
+   With `π = exp(5(ρ − 1))`, a route debiting 2× loses to its sibling until the sibling's account is
+   about 0.14 more used (ln 2 / 5): the cheaper plan takes the work while it has room, the dearer
+   one is overflow. A promotion still costs nothing; each candidate in the logged decision carries
+   its `debit`. Learning `debit` from the attempt log and readings waits for data that supports it.
 
 Deferred: pricing pay-per-token routes in dollars against a budget, and unlimited choosing accounts
 itself.
