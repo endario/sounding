@@ -173,7 +173,7 @@ class Choose(unittest.TestCase):
                     now=NOW, temperature=5.0)
         got = choice.rank(cat, **args)
         again = choice.rank(cat, **args, seed=got["seed"])
-        self.assertEqual((again["order"], again["seed"]), (got["order"], got["seed"]), "and replays again")
+        self.assertEqual((again["order"], again["seed"]), (got["order"], got["seed"]))
         self.assertEqual(got["pick"], got["order"][0])
 
     def test_an_abandoned_attempt_counts_against_no_route(self):

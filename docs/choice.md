@@ -110,7 +110,7 @@ matching no candidate are listed in the decision's `prefer_unmatched`. `--quota-
 `--temperature 0` (the default) by `E`, lowest first. Above it, sampled without replacement with
 `P ∝ exp(−E / temperature)` at each draw: a candidate that many minutes worse is e times less
 likely. Each candidate's odds of coming first are logged, with the random seed, so the order
-replays (`rank(..., seed=decision["seed"])`) and another policy can be evaluated on the same log later.
+replays and another policy can be evaluated on the same log later.
 
 A decayed average would pick much the same with less machinery; the Beta prior is kept because it
 says how far a few attempts should move a model, and because the logged `p` stays a probability.

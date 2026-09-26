@@ -127,8 +127,7 @@ def rank(cat: Catalog, *, tier: str, candidates: list[str], attempts: list[dict]
     catalog does not know is refused, in `candidates` as in `prefer`; one in `prefer` naming no
     candidate is listed in `prefer_unmatched`. An attempt must have a scored outcome (`ok`,
     `timeout`, `error`, `unavailable`) and a timezone-aware `at`; `attempts_unknown` counts those
-    naming no route of the catalog. `seed` (recorded) fixes a sampled order: a decision's own seed
-    replays it."""
+    naming no route of the catalog."""
     if not (math.isfinite(temperature) and temperature >= 0 and math.isfinite(quota_weight) and quota_weight >= 0
             and math.isfinite(deadline) and deadline > 0):
         raise ValueError("temperature and quota weight must be finite and not negative, the deadline positive")
