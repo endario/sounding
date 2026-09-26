@@ -1,52 +1,51 @@
 # Presets (#102)
 
-A caller of `choose`/`rank` sets up to five knobs besides its candidates: `tier`, `deadline`,
-`temperature`, `quota_weight` and `prefer`. Most callers do not know what a good `temperature` or
-`quota_weight` is, and each writes its own constants: today the agent runner hard-codes
-`temperature` 2 for one kind of use and 0 for another, and leaves `quota_weight` at the default. A
-preset is a named set of those knobs, shipped as data, so a caller names a way of choosing instead
-of tuning numbers. Prior art: OpenRouter's presets (`@preset/<slug>`), a named bundle of model,
-routing and sampling settings that a request's own parameters override.
+A caller of `choose`/`rank` tunes `temperature` and `quota_weight`, and may lean with `prefer`.
+Few callers know what good values are, so each keeps its own constants: the agent runner
+hard-codes `temperature` 2 for one kind of use and 0 for another. The owner wants unlimited to
+offer these as named, officially recommended ways of choosing, so a caller names one instead of
+tuning or maintaining numbers (#102). Prior art, partial: OpenRouter's presets, a named bundle of
+settings that a request's own parameters override.
 
 ## Shape
 
-In the catalog, beside tiers and offerings:
-
 ```toml
-[presets.steady]            # take the best-scoring candidate; quota and time as the defaults weigh them
+[presets.steady]   # the lowest expected cost, every time
 temperature = 0
 
-[presets.spread]            # try near-equal candidates in turn, so each builds a record
+[presets.spread]   # near-equal candidates take turns, so each keeps a record
 temperature = 2
-
-[presets.frugal]            # quota is scarce: a minute saved is worth less against it
-quota_weight = 60
-temperature = 0
 ```
 
-- A preset may set `tier`, `temperature`, `quota_weight` and `prefer`, and nothing else. Not
-  `deadline` (the size of a task is the caller's), not `candidates`, `exclude` or `vendors` (what
-  a caller may use is the caller's).
-- `unlimited choose --preset NAME ...` and `rank(..., preset="NAME")`: the preset fills every knob
-  the caller did not give; one the caller gives wins, as on OpenRouter. `prefer` merges by name,
-  the caller's value winning. A knob neither gives takes today's default.
-- The request records `preset` and the effective values, so a decision is explainable without the
-  catalog it was made under.
-- An unknown preset name is refused. `unlimited presets [--json]` lists them with their values;
-  `--catalog` includes them.
-- A local catalog adds presets or replaces a shipped one by name, as it does offerings.
-- unlimited never branches on a preset's name: it is only a label over the same parameters.
+- **What a preset may set:** `temperature`, `quota_weight` and `prefer`: how to choose. Not
+  `tier`, `deadline`, `candidates`, `exclude` or `vendors`: what the task is and what the caller may
+  use stay the caller's, and `--tier` stays required.
+- **Use:** `unlimited choose --preset NAME` and `rank(..., preset="NAME")`. A knob the caller gives
+  wins; one it omits comes from the preset; one neither gives takes today's default (temperature 0,
+  quota weight 20). Omission is tracked: `rank`'s `temperature` and `quota_weight` default to
+  `None`, and so do the CLI flags, so an explicit `--temperature 0` overrides a preset's 2.
+- **`prefer`:** the preset's map and the caller's merge key by key, the caller's value winning for
+  a name both give; the merged map then resolves per route as `prefer` always does (most specific
+  name wins). A caller that wants none of a preset's leans passes its own value for those names.
+- **One resolver:** `rank` resolves the preset; callers never merge by hand.
+- **Recorded:** the request carries `preset` and the effective `temperature`, `quota_weight` and
+  `prefer`, so a decision is explainable without the catalog it was made under (a preset is
+  mutable data: a release or a local file can change it).
+- **Catalog:** `[presets.NAME]` tables. A local catalog adds a preset, or replaces a shipped one of
+  the same name whole (no field merge). Validation at load: known keys only, `temperature` and
+  `quota_weight` finite and not negative, `prefer` minutes finite, `prefer` names known to the
+  catalog; a malformed preset is a `CatalogError`. An unknown preset name at choice time is a
+  `ValueError` (CLI exit 2). `--catalog` lists presets; `choose --help` names the shipped ones.
+- **Names say how they choose, never what for.** unlimited never branches on a preset's name.
 
-## Open questions
+## Decided (medium, for the critic to check)
 
-1. **Names: by how to choose, or by what the caller does?** The issue's examples (`analytical`,
-   `code-review`, `design-critique`) name callers' scenarios, which CLAUDE.md keeps out of
-   unlimited's shipped data. Proposed: ship presets named for how they choose (`steady`, `spread`,
-   `frugal`), and let a caller name its own scenarios in its local catalog
-   (`[presets.code-review]`) or, better, in its own code. The owner's examples then live where the
-   scenario does.
-2. **Which values ship.** The runner's two temperatures are the only settings in use; `frugal`'s
-   60 is a judgment, not a measurement. Ship only `steady` and `spread` until a second caller's
-   settings show another point worth naming?
-3. **Whether `rank` takes `preset`,** or callers resolve it (`choice.preset(cat, name)` returns the
-   dict and they merge). Taking it in `rank` keeps one merge rule and records the name; proposed.
+- **Shipped names are generic** (`steady`, `spread`). The issue's examples (`analytical`,
+  `code-review`, `design-critique`) name callers' scenarios, which CLAUDE.md keeps out of unlimited's
+  shipped data; a caller maps its scenario to a preset in its own code, or defines a
+  scenario-named preset in its local catalog.
+- **Only the two evidenced presets ship.** They are the runner's settings in use. A third (a
+  quota-scarce `quota_weight`, say) ships when a caller's use shows the value.
+- **Built now, not after a second caller** (critic round 1's alternative): the owner asked for
+  presets so callers stop keeping these constants; the runner switches to them in the same stack,
+  and 2mw2lt adopts them with `rank`.
