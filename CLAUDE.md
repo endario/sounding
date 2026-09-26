@@ -6,15 +6,15 @@ A public, general-purpose utility, decoupled from its users and useful on its ow
 a vendor and model catalog, and a load balancer that answers "which candidate is best for this
 task". It is domain agnostic (owner, 2026-09-26):
 
-- It never knows what a caller's task is. No review, critique, round, gate, seat or harness
-  concept appears in its code, flags, data model, defaults or docs; a caller maps its scenario onto
-  generic parameters (a duration, a deadline, how much to explore, what time is worth).
-- It holds no caller's configuration: no round order, effort policy, budgets, launch details or
+- Keep callers' scenarios out of it: no review, critique, round, gate, seat or harness concept in
+  its code, flags, data model, defaults or docs. A caller maps its scenario onto generic parameters
+  (a duration, a deadline, how much to explore, what time is worth).
+- Hold no caller's configuration: no round order, effort policy, budgets, launch details or
   independence rules. Those belong to the caller.
-- A caller may attach its own metadata (an opaque task label, key/value pairs). unlimited records
-  it with the request for later analysis and never branches on it.
-- Every invocation is recorded as it was asked and as it came out: the full request, and the full
-  result.
+- Let a caller attach its own metadata (an opaque task label, key/value pairs): record it with the
+  request for later analysis, and never branch on it.
+- Record each choice and each attempt as it was asked and as it came out: the whole request and
+  the whole result.
 - Name things for what they are in general, not for the first caller's use of them. Before adding a
   field, flag, constant or sentence, ask whether it names a particular caller's scenario; if it does,
   it belongs to the caller, and unlimited takes a generic parameter instead.
