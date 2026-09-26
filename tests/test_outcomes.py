@@ -34,9 +34,12 @@ class Log(unittest.TestCase):
         records, bad = outcomes.read(self.p)
         return outcomes.stats(outcomes.attempts(records, now), now), bad
 
-    def test_no_history_is_the_prior(self):
-        self.run_attempt("glm", "g", "unavailable", 0, 10 * MIN)
-        self.assertEqual(self.stats()[0], {})
+    def test_an_unreachable_route_counts_against_itself_and_no_other(self):
+        self.run_attempt("deepseek", "commandcode/deepseek/x", "unavailable", 0, 10 * MIN)
+        self.run_attempt("deepseek", "opencode-go/deepseek/x", "ok", 3, 20 * MIN)
+        got = self.stats()[0]
+        self.assertGreater(got[("deepseek", "commandcode/deepseek/x")]["fail"], 0)
+        self.assertEqual(got[("deepseek", "opencode-go/deepseek/x")]["fail"], 0.0)
 
     def test_recent_failures_raise_the_rate_and_it_decays_back_towards_the_prior(self):
         for i in range(2):
