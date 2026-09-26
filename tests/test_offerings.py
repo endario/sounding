@@ -160,6 +160,8 @@ class Routes(unittest.TestCase):
         # At temperature 0 a lean larger than a gap overturns it.
         top = lambda got: got["candidates"][got["pick"]]["model"]
         self.assertEqual(top(rank({"glm": 30})[1]), "glm-5.3-flash")
+        self.assertEqual(rank({"deepseek": -5, cc: 2, go: 1})[1]["prefer_unmatched"], [],
+                         "a name overridden on every route it names still matched them")
 
     def test_a_preference_must_name_something_real_by_a_finite_number(self):
         from unlimited import choice

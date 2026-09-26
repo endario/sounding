@@ -142,10 +142,10 @@ def rank(cat: Catalog, *, tier: str, candidates: list[str], attempts: list[dict]
     lean, used = {}, set()
     for c in cands:
         names = (c["model"], cat.route(c["model"])["model"], c["provider"])  # most specific first
+        used.update(n for n in names if n in prefer)
         name = next((n for n in names if n in prefer), None)
         if name is not None:
             lean[c["model"]] = prefer[name]
-            used.add(name)
     scored = score(cands, quota, outcomes.stats(attempts, now), deadline, cat.tie_preference, quota_weight, lean)
     seed = random.randrange(1 << 32)  # recorded: a sampled order can be replayed
     tried = order(scored, temperature, rng or random.Random(seed))
