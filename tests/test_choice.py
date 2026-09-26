@@ -162,9 +162,10 @@ class Choose(unittest.TestCase):
                                      (["codex"], [run(at=datetime(2026, 9, 26, 11, 0))])):
             with self.subTest(candidates=candidates, attempts=attempts), self.assertRaises(ValueError):
                 choice.rank(cat, candidates=candidates, attempts=attempts, **args)
-        got = choice.rank(cat, candidates=["codex"], attempts=[run(), run(model="gpt-5"), run(provider="nope")],
-                          **args)
-        self.assertEqual(got["attempts_unknown"], 2, "a model name no route carries, an unknown provider")
+        got = choice.rank(cat, candidates=["codex"], **args,
+                          attempts=[run(), run(provider="deepseek", model="x", offering="opencode-go/deepseek-v4.1-flash"),
+                                    run(model="gpt-5"), run(provider="nope"), run(offering="commandcode/nope")])
+        self.assertEqual(got["attempts_unknown"], 3, "a model or offering id no route carries, an unknown provider")
 
     def test_a_sampled_order_replays_from_its_seed(self):
         cat = catalog.load(Path(tempfile.mkdtemp()) / "none.toml")
