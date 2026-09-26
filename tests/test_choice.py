@@ -184,9 +184,13 @@ class Choose(unittest.TestCase):
         # Once GLM has as full a record, slower, it is tried less.
         slower = known + [run("glm", "glm-5.3-flash", 6, h / 10) for h in range(10)]
         self.assertLess(odds(choice.rank(cat, attempts=slower, **args))["glm"], odds(got)["glm"])
-        # A route no speed can save (its account far past its limit) is not explored at all.
+        # A rare pick (GLM, on some seed) still logs a chance of being picked.
+        picks = (choice.rank(cat, attempts=known, **{**args, "seed": s}) for s in range(500))
+        rare = next(d for d in picks if d["candidates"][d["pick"]]["provider"] == "glm")
+        self.assertGreater(rare["candidates"][rare["pick"]]["prob"], 0, "what was picked had a chance")
+        # A route no speed can save (its account far past its limit) is all but never explored.
         spent = choice.rank(cat, attempts=known, **{**args, "quota": {"codex": 0.5, "glm": 1.5}})
-        self.assertEqual(odds(spent)["glm"], 0.0)
+        self.assertLess(odds(spent)["glm"], 0.01)
         self.assertEqual(choice.rank(cat, attempts=known, **args, temperature=0)["policy"], "best")
 
     def test_a_sampled_order_replays_from_its_seed(self):

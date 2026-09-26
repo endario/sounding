@@ -101,12 +101,12 @@ def order(scored: list[dict], temperature: float | None, rng: random.Random, quo
     P ∝ exp(−e/τ) with τ in minutes."""
     if temperature is None:
         first = drawn(scored, quota_weight, rng)
+        # The odds count the draw that decided, so the pick's are never 0.
         wins = [0] * len(scored)
-        for _ in range(ODDS_DRAWS):
-            d = drawn(scored, quota_weight, rng)
+        for d in [first] + [drawn(scored, quota_weight, rng) for _ in range(ODDS_DRAWS)]:
             wins[min(range(len(d)), key=d.__getitem__)] += 1
         for c, e, w in zip(scored, first, wins):
-            c["e_drawn"], c["prob"] = e, w / ODDS_DRAWS
+            c["e_drawn"], c["prob"] = e, w / (ODDS_DRAWS + 1)
         return sorted(range(len(scored)), key=first.__getitem__)
     if temperature <= 0:
         out = sorted(range(len(scored)), key=lambda i: scored[i]["e"])

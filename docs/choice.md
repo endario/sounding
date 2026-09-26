@@ -39,7 +39,7 @@ per line, appended under an exclusive lock, each with a `type`:
 |---|---|---|
 | `start` | `unlimited attempt start` | `attempt` (id), `at`, `provider`, `model`, `offering` (the route's id, when not `model`), `effort`, `account`, `decision` (the choice it carries out, if any), `deadline` (seconds), `task`, `meta` |
 | `end` | `unlimited attempt end ID` | `attempt`, `at`, `outcome` (`ok`, `timeout`, `error`, `unavailable`, `abandoned`), `tokens` (`in`, `out`, `cache`), `meta` |
-| `decision` | `unlimited choose` | `decision` (id), `at`, `request` (everything asked, below), `effective`, `seed`, `candidates` (each scored, with its odds), `order`, `pick`, `prefer_unmatched`, `attempts_unknown` |
+| `decision` | `unlimited choose` | `decision` (id), `at`, `request` (everything asked, below), `policy`, `seed`, `candidates` (each scored, with its odds), `order`, `pick`, `prefer_unmatched`, `attempts_unknown` |
 
 `task` and `meta` are the caller's: a label and string key/value pairs, recorded for later analysis,
 never read. No prompt or content is recorded unless a caller puts it in `meta`.
@@ -117,14 +117,13 @@ matching no candidate are listed in the decision's `prefer_unmatched`. `--quota-
   as it could be the best; a route that cannot win on quota or preference whatever its speed is
   not tried; as records fill, exploration fades. How widely a thin record draws is set by the
   priors (a 10% failure rate worth five attempts, five minutes worth three), the maintainers'
-  constants, not the caller's. `prob` is each candidate's chance of coming first, from 1000 more
-  draws on the decision's seed.
+  constants, not the caller's. `prob` is each candidate's share of first places over the deciding
+  draw and 1000 more on the decision's seed.
 - **`--temperature 0` (`best`):** by `E` at the means, lowest first, never exploring.
 - **`--temperature M` above 0 (`softmax`):** sampled without replacement with `P ∝ exp(−E / M)` at
   each draw: a candidate that many minutes worse is e times less likely.
 
-The seed is logged, so the order replays, and `prob` is the chosen candidate's propensity, so
-another policy can be evaluated on the same log later.
+The seed is logged, so the order replays.
 
 A decayed average would pick much the same with less machinery; the Beta prior is kept because it
 says how far a few attempts should move a model, and because the logged `p` stays a probability.
