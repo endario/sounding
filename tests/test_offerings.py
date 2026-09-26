@@ -85,9 +85,13 @@ class Routes(unittest.TestCase):
         self.assertEqual((rho["opencode-go/deepseek-v4.1-flash"], rho["commandcode/deepseek/deepseek-v4.1-flash"]),
                          (0.2, None))
 
-    def test_an_offering_that_is_not_a_table_is_a_catalog_error(self):
-        with self.assertRaises(catalog.CatalogError):
-            load('schema = 2\nofferings = ["x"]\n')
+    def test_malformed_or_ambiguous_files_are_catalog_errors(self):
+        for text in ('schema = 2\nofferings = ["x"]\n',
+                     'schema = 1\n[providers.codex]\nstandard = "shared"\n[providers.meta]\nstandard = "shared"\n',
+                     'schema = 1\n[providers.orphan]\nusage = 5\n',
+                     'schema = 2\n[[offerings]]\nid = "x"\nmodel = "opus"\nvendor = "v"\n_of = "codex"\n'):
+            with self.assertRaises(catalog.CatalogError, msg=text):
+                load(text)
 
 if __name__ == "__main__":
     unittest.main()

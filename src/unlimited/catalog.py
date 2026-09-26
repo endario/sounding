@@ -77,6 +77,9 @@ def _parse(text: str, where: str) -> dict:
         got = _from_schema_1(got, where)
     elif got.get("schema") != SCHEMA:
         raise CatalogError(f"{where}: schema {got.get('schema')!r}, expected {SCHEMA}")
+    elif any(k.startswith("_") or k == "provider_keys" for k in got) or any(
+            k.startswith("_") for o in got.get("offerings", []) if isinstance(o, dict) for k in o):
+        raise CatalogError(f"{where}: keys starting with _, and provider_keys, are unlimited's own")
     if not isinstance(got.get("models", {}), dict) or not all(isinstance(m, dict) for m in got.get("models", {}).values()):
         raise CatalogError(f"{where}: models must be tables")
     if not all(isinstance(got.get(k, []), list) for k in ("tiers", "offerings", "banned", "tie_preference", "cards")):
@@ -105,12 +108,16 @@ def _from_schema_1(old: dict, where: str) -> dict:
             raise CatalogError(f"{where}: provider {provider!r}: a model id, its tiers and its usage vendor")
         m = models.setdefault(mid, {"provider": provider, "tiers": []})
         m["tiers"] += [t for t in tier_list if t not in m["tiers"]]
+        if m["provider"] != provider:
+            raise CatalogError(f"{where}: {mid}: listed under more than one provider")
         if not any(o["id"] == mid for o in offerings):
             offerings.append({"id": mid, "model": mid, **({"vendor": vendor} if vendor else {"_of": provider}),
                               **extra})
 
     replaces = []  # (provider, tier): schema 1's provider key replaced the shipped model there
     # A provider's `usage` alone moved its shipped models to that vendor's account.
+    if any("usage" in p and not isinstance(p["usage"], str) for p in providers.values()):
+        raise CatalogError(f"{where}: a provider's usage is a vendor name")
     usage = {name: p["usage"] for name, p in providers.items() if isinstance(p.get("usage"), str)}
     # Keys of the reader's own on a provider table, kept for the `providers` view.
     extras = {name: {k: v for k, v in p.items() if k != "usage" and k not in (tiers if isinstance(tiers, list) else [])}
@@ -225,7 +232,7 @@ def _check(c: dict) -> None:
             raise CatalogError(f"card {i + 1}: needs vendor, name, source, as_of; models, plan, "
                                f"intelligence, tok_s and price ({', '.join(PRICES)}) are optional")
     if not all(isinstance(m, str) for m in c.get("banned", [])):
-        raise CatalogError("banned: model names or offering ids")
+        raise CatalogError("banned: names only (providers, models, vendors, offering ids)")
     makers = {m["provider"] for m in models.values()}
     if not all(p in makers for p in c.get("tie_preference", [])):
         raise CatalogError("tie_preference: known providers only")
