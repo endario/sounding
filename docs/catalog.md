@@ -45,11 +45,9 @@ as_of = 2026-09-26
 
 One model may have several offerings, one per vendor that sells it; each is its own route, with its
 own history. `Catalog.routes(now, tier)` lists every live one (`id`, `provider`, `model`, `vendor`,
-`tiers`, `free`), free ones first. `candidates`, `model(provider, tier)` and the `providers` and
-`promotions` keys of `--catalog` are a one-route-per-provider view for readers that launch one
-offering per provider: they name the provider's first live offering.
-
-Keys unlimited does not read (a reader's own launch details, say) are kept and passed through.
+`tiers`, `free`), free ones first. `model(provider, tier)` and the `providers` and `promotions` keys
+of `--catalog` are a view for readers that launch one offering per provider: one vendor per provider,
+its first live offering at each tier.
 
 ## Merging a local file
 

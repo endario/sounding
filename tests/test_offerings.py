@@ -56,5 +56,15 @@ class Routes(unittest.TestCase):
         self.assertEqual(len([o for o in j["offerings"] if o["model"] == "deepseek-v4-1-flash"]), 2)
 
 
+    def test_a_schema_1_usage_alone_still_moves_a_providers_models_to_that_vendor(self):
+        c = load('schema = 1\n[providers.codex]\nusage = "azure"\n')
+        self.assertEqual({r["vendor"] for r in c.routes(NOW) if r["provider"] == "codex"}, {"azure"})
+
+    def test_the_one_vendor_view_never_pairs_a_tier_with_another_vendors_usage(self):
+        c = load('schema = 2\n[[offerings]]\nid = "sol-elsewhere"\nmodel = "gpt-6-sol"\nvendor = "azure"\n'
+                 '[[offerings]]\nid = "gpt-6-sol"\nmodel = "gpt-6-sol"\nvendor = "openai"\nuntil = 2020-01-01\n')
+        view = c.to_json(NOW)["providers"]["codex"]
+        self.assertEqual((view["usage"], view.get("heavy")), ("openai", None), view)
+
 if __name__ == "__main__":
     unittest.main()

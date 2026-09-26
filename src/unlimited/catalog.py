@@ -108,6 +108,8 @@ def _from_schema_1(old: dict, where: str) -> dict:
                               **extra})
 
     replaces = []  # (provider, tier): schema 1's provider key replaced the shipped model there
+    # A provider's `usage` alone moved its shipped models to that vendor's account.
+    usage = {name: p["usage"] for name, p in providers.items() if isinstance(p.get("usage"), str)}
     for name, p in providers.items():
         for t in tiers if isinstance(tiers, list) else []:
             if t in p:
@@ -121,7 +123,7 @@ def _from_schema_1(old: dict, where: str) -> dict:
             {"free": True, **({"until": promo["until"]} if "until" in promo else {})})
     out = {k: v for k, v in old.items() if k not in ("providers", "promotions")}
     return {**out, "schema": SCHEMA, "models": models, "offerings": offerings,
-            "_replaces": replaces, "_replaces_free": "promotions" in old}
+            "_replaces": replaces, "_replaces_free": "promotions" in old, "_usage": usage}
 
 
 def _merge(shipped: dict, local: dict) -> dict:
@@ -143,7 +145,9 @@ def _merge(shipped: dict, local: dict) -> dict:
         for m in models.values():
             if m["provider"] == provider and tier in m["tiers"]:
                 m["tiers"] = [t for t in m["tiers"] if t != tier]
-    shipped_offerings = shipped.get("offerings", [])
+    shipped_offerings = [dict(o, vendor=local["_usage"][models[o["model"]]["provider"]])
+                         if models.get(o.get("model"), {}).get("provider") in local.get("_usage", {}) else o
+                         for o in shipped.get("offerings", [])]
     if local.get("_replaces_free"):
         shipped_offerings = [o for o in shipped_offerings if not o.get("free")]
     for k, v in local.get("models", {}).items():
@@ -282,11 +286,11 @@ class Catalog:
         for r in live:
             if r["free"]:
                 continue
-            p = providers.setdefault(r["provider"], {})
+            p = providers.setdefault(r["provider"], {"usage": r["vendor"]})
+            # One vendor per provider in this view: a tier served only on another vendor is left out.
             for t in r["tiers"]:
-                if t not in p:
+                if t not in p and r["vendor"] == p["usage"]:
                     p[t] = r["id"]
-                    p.setdefault("usage", r["vendor"])
         for name in {m["provider"] for m in self.models.values()}:
             providers.setdefault(name, {"usage": next((o["vendor"] for o in self.offerings
                                                         if self.models[o["model"]]["provider"] == name), "")})
