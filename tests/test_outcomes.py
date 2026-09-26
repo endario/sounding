@@ -68,6 +68,12 @@ class Log(unittest.TestCase):
             self.run_attempt("deepseek", "d", "ok", 2, (10 + i) * MIN)
         self.assertLess(self.stats()[0][("deepseek", "d")]["t_ok"], 200)
 
+    def test_an_attempts_offering_is_its_route_whatever_its_model_field_says(self):
+        aid = outcomes.start(provider="deepseek", model="deepseek-v4-1-flash", effort=None, task=None, account=None,
+                             decision=None, deadline=600, now=NOW - 10 * MIN, offering="commandcode/deepseek/x", p=self.p)
+        outcomes.end(aid, outcome="error", now=NOW - 9 * MIN, p=self.p)
+        self.assertEqual(list(self.stats()[0]), [("deepseek", "commandcode/deepseek/x")])
+
     def test_an_end_with_an_unknown_outcome_is_not_read_as_a_timeout(self):
         aid = self.run_attempt("glm", "g", None, 0, 40 * MIN, deadline=60)
         outcomes.end(aid, outcome="later-schema", now=NOW - 39 * MIN, p=self.p)
