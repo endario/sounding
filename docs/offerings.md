@@ -3,7 +3,11 @@
 Issue #104. Today a model id belongs to one provider and a provider to one usage vendor, so a model
 sold by two vendors can only be listed by inventing a second provider, which breaks the provider's
 meaning as the model's maker. As on OpenRouter, a model should have several offerings, and the
-chooser should spread one model's load across them by price, quota and reliability.
+chooser should spread one model's load across them.
+
+**The offering id is the route key everywhere**: in the catalog's candidates, in `choose`'s input and
+decision, in attempts and in the statistics learned from them. Provider and model are descriptive
+fields of an offering.
 
 ## Data model (catalog `schema = 2`)
 
@@ -11,17 +15,15 @@ chooser should spread one model's load across them by price, quota and reliabili
 schema = 2
 tiers = ["standard", "heavy"]
 
-[providers.deepseek]                 # a maker; facts about the maker only (none required)
-
 [models."deepseek-v4.1-flash"]       # one entry per model, keyed by a vendor-neutral name
 provider = "deepseek"                # its maker
 tiers = ["standard"]                 # the tiers it may serve
 intelligence = 39.5                  # optional, vendor-independent
 
-[[offerings]]                        # a vendor selling that model
+[[offerings]]                        # a vendor's route to that model, most preferred first
+id = "opencode-go/deepseek-v4.1-flash"   # the vendor's id for it: unique, what a caller launches
 model = "deepseek-v4.1-flash"
 vendor = "opencode"                  # the vendor whose account a use spends
-id = "opencode-go/deepseek-v4.1-flash"   # the vendor's id for it: what a caller launches
 plan = "go"                          # optional
 tok_s = 237                          # optional published figures, with source and as_of
 price = { input = 0.15, output = 0.60, cache_read = 0.003 }
@@ -29,61 +31,53 @@ source = "https://…"
 as_of = 2026-09-26
 
 [[offerings]]
+id = "commandcode/deepseek/deepseek-v4.1-flash"
 model = "deepseek-v4.1-flash"
 vendor = "commandcode"
-id = "commandcode/deepseek/deepseek-v4.1-flash"
-free_until = 2026-09-30              # optional: a promotion, no quota cost through that day
+free_until = 2026-09-30              # optional: a promotion through that day, UTC
 ```
 
-- A **model** has one maker and the tiers it serves. An **offering** is a vendor's route to it.
-  An offering id is unique across the catalog.
+- A **model** has one maker and the tiers it serves; it needs no `[providers]` table.
 - **Cards** become offerings' published figures; `intelligence` moves to the model.
-- **Promotions** become an offering attribute (`free_until`, or `free = true` with no end).
-- **Bans and switches** take a provider, a model, a vendor, an offering id, or `provider:model`.
-- `tie_preference` stays a list of providers.
+- **Promotions** become an offering attribute (`free_until`).
+- **Order** among one model's offerings is the catalog keeper's stated preference, used where a
+  caller asks for one offering without choosing (below).
+- **Merging a local file**: models merge key by key; an offering replaces the shipped offering with
+  the same id, or is added; `tiers` and `tie_preference` are replaced whole; `banned` is the union.
+- **Bans and switches** take a provider, a model, a vendor, an offering id, or `provider:model`
+  (`unlimited off commandcode` takes every Command Code offering out).
+- A local **schema-1** file is read as before and converted on load: each provider's model at a tier
+  becomes a model of that provider with one offering of the same id on the provider's `usage` vendor.
 
 ## Choice over offerings
 
-`choose` candidates become offerings: every live offering of every model, at the tier, whose maker
-is among the providers the caller allows. Each is scored as today (failure rate and durations per
-offering; quota price), with one change: the caller's quota input is keyed by **vendor** (the
-projected use of the account it would launch there), since one model's offerings spend different
-vendors. The decision names provider, model, vendor and offering id.
+`choose` candidates are offerings: every live offering, at the tier, of a model whose maker is among
+the providers the caller allows. The caller's quota input is keyed by **offering id**
+(`--quota ID=ρ`): the projected use of the account it would launch that offering on, since only the
+caller knows which account and plan that is. An offering with no `ρ` is priced at the limit, a
+promotion at zero. The decision names the offering id, with its provider, model and vendor.
 
-Why per offering and not per model: two vendors selling the same model differ in speed, reliability
-and price, which is the point of having both.
+Statistics are per offering id, so a failure on one vendor's route does not lower another's. An
+attempt records the offering id it launched (its `model` field today holds exactly that id, so the
+history already logged carries over). `unavailable` now counts against the offering: a vendor that
+cannot be reached is that route's failure, not the model's elsewhere.
 
-**Price across billing kinds**, all in minutes so they add:
+Out of this change: pricing pay-per-token offerings in dollars, and unlimited choosing the account
+from its own readings. Both need an unambiguous account and price contract first.
 
-- Subscription with a quota: the quota shadow price already used, `π(ρ)`.
-- Promotion: zero.
-- Pay per token (a vendor without quota readings): the offering's price for a typical use (tokens
-  observed on that offering, else pooled) times a caller-supplied value of money
-  (`--money-weight`, minutes per dollar; default 0, so dollars are ignored unless asked).
-- A plan whose quota is in dollars (Command Code's): a subscription; its readings already give `ρ`.
+## Compatibility for callers that have not moved
 
-A model normally served by its maker's own plan, with resellers as the fallback (GLM Flash on Z.ai),
-needs no rule: while Z.ai's quota is cheap the reseller's price loses; as Z.ai's `ρ` climbs, it wins.
-
-## Compatibility
-
-- Schema 1 is refused with a message naming the new format (no machine holds a local schema-1 file
-  today).
-- `Catalog.candidates(tier)`, `model(provider, tier)` and `provider_of(id)` keep their meaning for
-  existing callers: a provider's model at a tier is its first live offering there, in file order.
+- `Catalog.candidates(tier)` returns every live offering (`provider`, `model` = the offering id,
+  `promoted`), promotions first, then models in file order and their offerings in preference order.
+- `Catalog.model(provider, tier)` returns the provider's most preferred live offering at the tier,
+  and `provider_of(id)` the maker of an offering id.
 - `models --catalog` adds `models` and `offerings`, and keeps a derived `providers` view (each
-  provider's first offering per tier, with that offering's vendor as `usage`), so a caller that has
-  not moved still works, seeing one vendor per model.
-- `choose --quota` accepts vendor keys; a provider key is read as that provider's first offering's
-  vendor, for one release.
+  provider's most preferred offering per tier, with its vendor as `usage`) for callers still reading
+  it.
+- `choose --quota` keyed by a provider name is refused with a message: a provider no longer names
+  one vendor.
 
 ## Callers (outside unlimited)
 
-A caller launches an offering by its vendor (its own mapping from vendor to launcher) and its id. The
-agent runner's per-vendor scoring and account choice stay its own until unlimited chooses accounts
-itself (not in this change).
-
-## Not in this change
-
-- unlimited choosing the account itself from its own readings (callers still pass `ρ` per vendor).
-- Presets (#102).
+A caller launches an offering by its vendor (its own mapping from vendor to launcher) and its id,
+passes `ρ` per offering for the account it would use, and records the attempt with that id.
