@@ -112,6 +112,14 @@ class Choose(unittest.TestCase):
         self.assertEqual(logged["seed"] is not None, True, "a sampled pick can be replayed")
         self.assertEqual(got["decision"], logged["decision"])
 
+    def test_a_non_finite_or_negative_parameter_is_refused_before_scoring(self):
+        cat = catalog.load(Path(tempfile.mkdtemp()) / "none.toml")
+        log = Path(tempfile.mkdtemp()) / "d.jsonl"
+        for kw in ({"temperature": float("nan")}, {"temperature": -1.0}, {"quota_weight": float("inf")}):
+            with self.assertRaises(ValueError, msg=kw):
+                choice.choose(cat, tier="standard", providers=["glm"], quota={}, deadline=60, now=NOW, log=log, **kw)
+        self.assertFalse(log.exists(), "nothing is logged for a refused request")
+
     def test_tiers_are_the_catalogs_to_name(self):
         local = Path(tempfile.mkdtemp()) / "catalog.toml"
         # A local list of tiers replaces the shipped one, so the shipped promotions go with it.

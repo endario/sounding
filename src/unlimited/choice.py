@@ -80,6 +80,9 @@ def choose(cat: Catalog, *, tier: str, providers: list[str], quota: dict[str, fl
            rng: random.Random | None = None, log=None) -> dict | None:
     """The decision, logged with the whole request and the whole result, or None when no provider
     has a model at `tier`. `task` and `meta` are recorded, never read."""
+    if not (math.isfinite(temperature) and temperature >= 0 and math.isfinite(quota_weight) and quota_weight >= 0
+            and math.isfinite(deadline) and deadline > 0):
+        raise ValueError("temperature and quota weight must be finite and not negative, the deadline positive")
     cands = candidates(cat, tier, providers, now)
     if not cands:
         return None

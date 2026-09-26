@@ -204,9 +204,13 @@ def _choose(a) -> int:
     if a.tier not in cat.tiers:
         print(f"unlimited: {a.tier}: not a tier of the catalog ({', '.join(cat.tiers)})", file=sys.stderr)
         return 2
-    got = choice.choose(cat, tier=a.tier, providers=list(dict.fromkeys(p for p in a.candidates.split(",") if p)),
-                        quota=quota, deadline=a.deadline, now=now, temperature=a.temperature,
-                        quota_weight=a.quota_weight, task=a.task, meta=dict(a.meta or []))
+    try:
+        got = choice.choose(cat, tier=a.tier, providers=list(dict.fromkeys(p for p in a.candidates.split(",") if p)),
+                            quota=quota, deadline=a.deadline, now=now, temperature=a.temperature,
+                            quota_weight=a.quota_weight, task=a.task, meta=dict(a.meta or []))
+    except ValueError as e:
+        print(f"unlimited: {e}", file=sys.stderr)
+        return 2
     if got is None:
         print(f"unlimited: no candidate has a model at {a.tier}", file=sys.stderr)
         return 1

@@ -33,7 +33,7 @@ runs. Ordering, tie rules and fallback are the caller's.
 ## 2. Attempt log
 
 `$XDG_STATE_HOME/unlimited/decisions.jsonl` (default `~/.local/state/unlimited/`), one JSON object
-per line, appended under an exclusive lock. Every record carries `"v": 1` and a `type`:
+per line, appended under an exclusive lock, each with a `type`:
 
 | type | written by | fields |
 |---|---|---|
