@@ -415,9 +415,8 @@ exit status: 0 decided; 1 no named candidate is live at the tier; 2 bad input.""
                     help="offering ids the caller rules out; a reason is recorded, never read")
     ch.add_argument("--vendors", metavar="VENDOR,...|any",
                     help="the vendors a use may spend; a route on any other is not a candidate. Default: "
-                         "those with an account on this machine (found from credentials, no network), so a "
-                         "route this machine cannot use is never recommended; `any` for every vendor, when "
-                         "the caller launches elsewhere")
+                         "those with an account on this machine; `any` for every vendor, when the caller "
+                         "launches elsewhere")
     ch.add_argument("--temperature", type=float, default=0.0, metavar="MINUTES",
                     help="0 (default): cheapest first; above it the order is sampled, a candidate this many "
                          "minutes worse being e times less likely at each draw")

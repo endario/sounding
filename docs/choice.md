@@ -59,8 +59,7 @@ the file passes 1 MB.
 A name is a provider (its live routes at the tier, promotions first), a model (each of its live
 routes) or an offering id (that route), as the catalog has them; switched-off and banned routes are
 never candidates. `--exclude` rules out routes the caller cannot use; a reason is the caller's,
-recorded and never read. Nor is a route on a vendor this machine has no account with (found from
-credentials, as `read` finds them, with no network call; a vendor unlimited cannot read is kept):
+recorded and never read. Nor is a route on a vendor this machine has no account with:
 `--vendors` names the vendors instead, or `any` for all of them, for a caller that launches
 elsewhere.
 
