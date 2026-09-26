@@ -146,7 +146,7 @@ class Choose(unittest.TestCase):
                         now=NOW)
             clean = choice.rank(cat, attempts=[], **args)
             hung = choice.rank(cat, attempts=hangs, **args)
-        self.assertEqual(os.listdir(state), [], "nothing read or written")
+        self.assertEqual(os.listdir(state), [], "nothing written")
         self.assertEqual(hung["candidates"][hung["pick"]]["provider"], "codex")
         self.assertNotEqual([c["e"] for c in clean["candidates"]], [c["e"] for c in hung["candidates"]])
 
