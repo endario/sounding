@@ -22,9 +22,7 @@ fields of an offering.
    shipped catalog adds second offerings (Command Code for DeepSeek Flash and Muse Spark).
 
 4. **What a route debits.** Two plans can sell one model at the same list price and debit their
-   quota differently for it.
-
-   So the catalog states it as data: an offering may carry `debit`, an absolute multiplier of the
+   quota differently for it. The catalog states this as data: an offering may carry `debit`, an absolute multiplier of the
    account share one run uses (1, the default, is a plain offering). The quota term of that route's
    expected cost is multiplied by it:
 
