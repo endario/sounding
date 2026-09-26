@@ -108,7 +108,7 @@ class Choose(unittest.TestCase):
         self.assertEqual(logged["v"], 1)
         self.assertEqual(logged["request"], {"tier": "standard", "providers": ["glm", "codex"], "quota": {"glm": 0.4},
                                              "deadline": 600, "temperature": 1.5, "quota_weight": 10,
-                                             "task": "summarise", "meta": {"ticket": "42"}})
+                                             "task": "summarise", "meta": {"ticket": "42"}, "exclude": []})
         self.assertEqual(logged["seed"] is not None, True, "a sampled pick can be replayed")
         self.assertEqual(got["decision"], logged["decision"])
 
