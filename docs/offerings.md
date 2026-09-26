@@ -29,16 +29,18 @@ fields of an offering.
    identical 28k-token runs: $0.010 and $0.016), so a per-run measurement is too noisy to learn from
    yet, and token counts at card prices do not predict it (critic rounds 1 and 2).
 
-   So the catalog states it, as data with its source, the way it states tiers: an offering may carry
-   `debit`, how much of its account one run uses relative to the model's plainest offering (default
-   1). The quota term of that route's expected cost is multiplied by it:
+   So the catalog states it as data: an offering may carry `debit`, an absolute multiplier of the
+   account share one run uses (1, the default, is a plain offering). The quota term of that route's
+   expected cost is multiplied by it:
 
        E = … + quota_weight·debit_r·π(ρ_r) − preference
 
    With `π = exp(5(ρ − 1))`, a route debiting 2× loses to its sibling until the sibling's account is
    about 0.14 more used (ln 2 / 5): the cheaper plan takes the work while it has room, the dearer
-   one is overflow. A promotion still costs nothing; each candidate in the logged decision carries
-   its `debit`. Learning `debit` from the attempt log and readings waits for data that supports it.
+   one is overflow. With no projection for either, the debit alone decides. A promotion still costs
+   nothing; each candidate in the logged decision carries its `debit`. The shipped catalog sets none
+   until a measurement is corroborated beyond one machine; learning `debit` from the attempt log and
+   readings waits for data that supports it.
 
 Deferred: pricing pay-per-token routes in dollars against a budget, and unlimited choosing accounts
 itself.
