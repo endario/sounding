@@ -21,25 +21,25 @@ fields of an offering.
 3. **Callers and data**: the agent runner and 2mw2lt read `routes` and launch by vendor; then the
    shipped catalog adds second offerings (Command Code for DeepSeek Flash and Muse Spark).
 
-4. **What a route spends.** Two plans can sell one model at different rates: measured by a caller
-   over four runs each, Command Code spent 1.5× (DeepSeek Flash), 2.2× (GLM Flash) and 5.4× (Muse
-   Spark) what OpenCode Go did. The quota price `π(ρ)` says how scarce an account is, not how much
-   of it one run uses, so today the dearer route wins whenever its account is emptier. Each route's
-   quota term is scaled by its expected spend relative to the other candidates':
+4. **What a route spends — measured before it is priced.** Two plans can sell one model and debit
+   their quota differently for it: a caller measured Command Code spending 1.5× (DeepSeek Flash),
+   2.2× (GLM Flash) and 5.4× (Muse Spark) what OpenCode Go did over four runs each, though both
+   publish the same per-token list prices for those models (checked 2026-09-26). So token counts at
+   card prices cannot stand in for it (critic round 1): each plan's own meter can.
 
-       s_r = cost_r / median(cost over the candidates with one)      (1 when cost_r is unknown)
-       E   = … + quota_weight·π(ρ_r)·s_r − preference
+   **4a, measure.** unlimited already keeps every reading's windows as samples (`projection`), and
+   the attempt log names the account each attempt ran on. For an attempt with an end and an
+   account, whose account ran nothing else between the last sample before its start and the first
+   after its end, its **use** of each window is the rise in that window's used fraction between
+   those two samples (same reset; a reset in between discards it). `unlimited outcomes` reports, per
+   route, the decayed mean use of each window role and how many attempts it rests on. Use by
+   anything this log does not see (another machine, a person) lands in the same readings and
+   inflates it; that is reported, not corrected. Nothing in `choose` changes.
 
-   `cost_r`, in USD per run, is the route's decayed mean tokens from the attempt log (`in`, `out`,
-   `cache`) at its vendor's card price (the card whose vendor and models match the offering), the
-   figure `unlimited cards` already shows; with fewer than one attempt's weight of tokens, the
-   model's mean tokens on any route stand in, at this route's price. A route with no card price, or
-   a promotion, keeps `s = 1` and `π` as today. The median makes `s` dimensionless and leaves a
-   single candidate's cost exactly as before. Each candidate in the logged decision carries `cost`
-   and `s`.
-
-   Cards gain the OpenCode Go prices where OpenCode publishes them. Nothing changes for a caller:
-   the flags are the same, and a model sold by one vendor scores as it does now.
+   **4b, price.** Once 4a shows routes' use differing reliably (the three measured models first),
+   the quota term becomes `quota_weight·π(ρ_r)·u_r/ū`, where `u_r` is the route's measured use of
+   the window its `ρ` is projected on and `ū` the median over candidates that have one (`u/ū = 1`
+   with no measurement, and when `ū` is 0). Its design is settled on 4a's data, not now.
 
 Deferred: pricing pay-per-token routes in dollars against a budget, and unlimited choosing accounts
 itself.
