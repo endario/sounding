@@ -21,6 +21,8 @@ unlimited read [--vendor V]... [--max-age SECONDS] --json
 unlimited capture claude-statusline      # in a Claude Code statusline script
 ```
 
+Every command, with its options, output and examples: `unlimited --help` and `unlimited COMMAND --help`.
+
 Each reading gives each limit's window length, the fraction used so far, and its reset time. It
 also gives whether the vendor says the limit is held, and why, and, where the vendor names it,
 the account's plan and, for Claude, its credits: what it may spend once the windows are used.
