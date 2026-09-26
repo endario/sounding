@@ -145,15 +145,15 @@ passes; `unlimited off` lists what is off. It drops out of `models` and `--catal
 Which model to use for a task, and a record of how each use went, so the next choice learns from it:
 
 ```
-decision=$(unlimited choose --tier standard --candidates codex,glm,deepseek --deadline 900 --json)
-# launch candidates[pick]["model"]; on failure, the next index in "order"
-id=$(unlimited attempt start --provider P --model M --deadline 900 --decision D)
+unlimited choose --tier standard --candidates codex,glm,deepseek --deadline 900 --json > decision.json
+# launch candidates[pick].model; if it cannot run, the next index in order
+id=$(unlimited attempt start --provider P --model M --deadline 900 --decision "$(jq -r .decision decision.json)")
 unlimited attempt end "$id" --outcome ok --tokens-in N --tokens-out N
 ```
 
 `choose` orders the candidates (providers, models or offering ids) by expected minutes: how often
 each fails here, how long it takes, and what its quota costs (`--quota ID=ρ`, the account's
-projected use at reset, from `unlimited read`). It explores by itself, trying a route with a thin
+projected use at reset). It explores by itself, trying a route with a thin
 record about as often as it could be the best, so there is nothing to tune; `--exclude`,
 `--prefer`, `--vendors`, `--temperature` and `--quota-weight` are there for the rare caller that
 needs them. A start whose deadline passes with no end counts as a timeout. Task labels and

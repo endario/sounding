@@ -2,8 +2,7 @@
 
 unlimited answers one question for any caller: of the candidates the caller allows, which is the
 best to use now for a task, and in what order to fall back? It never knows what the task is. The
-caller describes it only through generic parameters (how long it will wait, how much of each
-account it projects to use) and may attach its own label and metadata, which unlimited records and
+caller describes it through generic parameters and may attach its own label and metadata, which unlimited records and
 never reads. Nothing needs tuning: the choice explores by itself as far as the evidence is thin.
 
 Three parts, each usable on its own:
